@@ -10,9 +10,25 @@ import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import StatusView from "../sidebarComponets/StatusView";
 import { ApiMessage, ChatAreaProps, Message } from "@/types/chatTypes";
-import { addMessage, setCurrentChat, setLoading, setMessages } from "@/lib/store/chatSlice";
+import { 
+  addMessage, 
+  setCurrentChat, 
+  setLoading, 
+  setMessages,
+  updateMessageStatus // Add this import
+} from "@/lib/store/chatSlice";
 import { socketService } from "@/lib/socket";
-import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItem, ListItemText } from "@mui/material";
+import { 
+  Button, 
+  Checkbox, 
+  Dialog, 
+  DialogActions, 
+  DialogContent, 
+  DialogTitle, 
+  List, 
+  ListItem, 
+  ListItemText 
+} from "@mui/material";
 
 export default function ChatArea({
   contact,
@@ -38,11 +54,12 @@ export default function ChatArea({
   const [showStatusView, setShowStatusView] = useState(false);
   const [showForwardDialog, setShowForwardDialog] = useState(false);
   const [statusUserId, setStatusUserId] = useState<string | null>(null);
- const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null)
-  const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null)
+  const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
+  const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<ApiMessage | null>(null);
-const [forwarding, setForwarding] = useState<ApiMessage | null>(null);
-const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
+  const [forwarding, setForwarding] = useState<ApiMessage | null>(null);
+  const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
+  
   const { handleTyping } = useChatSocket(channelId, currentUserId, receiverId);
 
   // Set current chat when props change
@@ -52,42 +69,48 @@ const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
 
   // Fetch initial messages
   useEffect(() => {
-   const fetchMessages = async () => {
-  dispatch(setLoading(true));
-  try {
-    // Add proper typing to the API response
-    const data = await getApi<ApiMessage[]>(API_ENDPOINTS.MESSAGES_CHANNELID(channelId));
-    
-    const formattedMessages = data.map((msg) => ({
-      _id: msg._id,
-      senderId: msg.senderId || (msg.receiverId === currentUserId ? receiverId : currentUserId),
-      receiverId: msg.receiverId,
-      content: msg.content,
-      type: msg.type,
-      createdAt: msg.createdAt,
-      isSent: msg.senderId === currentUserId,
-      isDelivered: msg.isDelivered || msg.receiverId === currentUserId,
-      isRead: msg.isRead || false,
-      fileUrl: msg.fileUrl || "",
-      fileName: msg.fileName || "",
-      fileSize: msg.fileSize || "",
-      channelId: msg.channelId || channelId
-    }));
+    const fetchMessages = async () => {
+      dispatch(setLoading(true));
+      try {
+        // Add proper typing to the API response
+        const data = await getApi<ApiMessage[]>(API_ENDPOINTS.MESSAGES_CHANNELID(channelId));
+        
+        const formattedMessages: Message[] = data.map((msg) => ({
+          _id: msg._id,
+          // Fix: Ensure senderId is always a string
+          senderId: typeof msg.senderId === 'string' 
+            ? msg.senderId 
+            : msg.senderId?._id || (msg.receiverId === currentUserId ? receiverId : currentUserId),
+          receiverId: msg.receiverId,
+          content: msg.content,
+          type: msg.type,
+          createdAt: msg.createdAt,
+          isSent: (typeof msg.senderId === 'string' ? msg.senderId : msg.senderId?._id) === currentUserId,
+          isDelivered: msg.isDelivered || msg.receiverId === currentUserId,
+          isRead: msg.isRead || false,
+          fileUrl: msg.fileUrl || "",
+          fileName: msg.fileName || "",
+          fileSize: msg.fileSize || "",
+          channelId: msg.channelId || channelId,
+          // Add optional fields that might be missing
+          isError: false,
+          replyTo: msg.replyTo,
+          isForwarded: msg.isForwarded,
+          forwardedFrom: msg.forwardedFrom
+        }));
 
-    dispatch(setMessages(formattedMessages));
-  } catch (error) {
-    console.error("Error fetching messages:", error);
-  } finally {
-    dispatch(setLoading(false));
-  }
-};
+        dispatch(setMessages(formattedMessages));
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      } finally {
+        dispatch(setLoading(false));
+      }
+    };
 
     if (channelId && currentUserId && receiverId) {
       fetchMessages();
     }
   }, [channelId, currentUserId, receiverId, dispatch]);
-
-  
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -112,45 +135,45 @@ const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
       fileName: msg.fileName || "",
       fileSize: msg.fileSize || "",
       channelId: msg.channelId || channelId,
-        ...(replyingTo && { replyTo: replyingTo._id }),
-    ...(forwarding && { 
-      isForwarded: true,
-      forwardedFrom: forwarding._id,
-    })
+      ...(replyingTo && { replyTo: replyingTo._id }),
+      ...(forwarding && { 
+        isForwarded: true,
+        forwardedFrom: forwarding._id,
+      })
     };
 
     dispatch(addMessage(newMessage));
 
-       try {
-    if (isConnected) {
-      if (replyingTo) {
-        await socketService.replyToMessage({
-          originalMessageId: replyingTo._id,
-          receiverId,
-          content: msg.content,
-          type: msg.type || 'text'
-        });
-      } else if (forwarding) {
-        await socketService.forwardMessage({
-          messageId: forwarding._id,
-          receiverIds: [receiverId]
-        });
-      } else {
-        await socketService.sendMessage(newMessage);
+    try {
+      if (isConnected) {
+        if (replyingTo) {
+          await socketService.replyToMessage({
+            originalMessageId: replyingTo._id,
+            receiverId,
+            content: msg.content,
+            type: msg.type || 'text'
+          });
+        } else if (forwarding) {
+          await socketService.forwardMessage({
+            messageId: forwarding._id,
+            receiverIds: [receiverId]
+          });
+        } else {
+          await socketService.sendMessage(newMessage);
+        }
+        
+        setReplyingTo(null);
+        setForwarding(null);
       }
-      
-      setReplyingTo(null);
-      setForwarding(null);
+    } catch (error) {
+      console.error("Send failed:", error);
+      // Fix: Make sure updateMessageStatus action exists in your chatSlice
+      dispatch(updateMessageStatus({ 
+        messageId: newMessage._id,
+        status: 'error' 
+      }));
     }
-  } catch (error) {
-    console.error("Send failed:", error);
-    // Mark message as failed in your state
-    dispatch(updateMessageStatus({ 
-      id: newMessage._id, 
-      status: 'error' 
-    }));
-  }
-};
+  };
 
   const isReceiverOnline = onlineUsers.includes(receiverId);
 
@@ -166,87 +189,125 @@ const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
     isTyping: typingStatus[receiverId],
   };
 
-   const clearReply = useCallback(() => {
-    setReplyingToMessageId(null)
-  }, [])
+  const clearReply = useCallback(() => {
+    setReplyingToMessageId(null);
+    setReplyingTo(null);
+  }, []);
 
-    const clearForward = useCallback(() => {
-    setForwardingMessageId(null)
-  }, [])
+  const clearForward = useCallback(() => {
+    setForwardingMessageId(null);
+    setForwarding(null);
+  }, []);
 
+  const handleReplyMessage = useCallback((messageId: string) => {
+    const originalMessage = messages.find(msg => msg._id === messageId);
+    if (!originalMessage) return;
+    
+    // Convert Message to ApiMessage for compatibility
+    const apiMessage: ApiMessage = {
+      ...originalMessage,
+      senderId: originalMessage.senderId // This is already a string now
+    };
+    
+    setReplyingTo(apiMessage);
+    setReplyingToMessageId(messageId);
+    setForwarding(null);
+    setForwardingMessageId(null);
+  }, [messages]);
 
-const handleReplyMessage = useCallback((messageId: string) => {
-  const originalMessage = messages.find(msg => msg._id === messageId);
-  if (!originalMessage) return;
-  
-  setReplyingTo(originalMessage);
-  setForwarding(null);
-}, [messages]);
+  const handleForwardMessage = useCallback((messageId: string) => {
+    const message = messages.find(msg => msg._id === messageId);
+    if (!message) return;
+    
+    // Convert Message to ApiMessage for compatibility
+    const apiMessage: ApiMessage = {
+      ...message,
+      senderId: message.senderId // This is already a string now
+    };
+    
+    setForwarding(apiMessage);
+    setForwardingMessageId(messageId);
+    setReplyingTo(null);
+    setReplyingToMessageId(null);
+    setShowForwardDialog(true);
+  }, [messages]);
 
-const handleForwardMessage = useCallback((messageId: string) => {
-  const message = messages.find(msg => msg._id === messageId);
-  if (!message) return;
-  
-  setForwarding(message);
-  setReplyingTo(null);
-  setShowForwardDialog(true);
-}, [messages]);
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    // Implement delete message logic here
+    console.log("Deleting message:", messageId);
+    // You might want to add a deleteMessage action to your store
+  }, []);
 
-const ForwardDialog = ({ 
-  open, 
-  onClose, 
-  onForward,
-  message
-}: {
-  open: boolean;
-  onClose: () => void;
-  onForward: (recipients: string[]) => void;
-  message: ApiMessage | null;
-}) => {
-  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
-  const contacts = useAppSelector(state => state.user.chatusers);
+  const ForwardDialog = ({ 
+    open, 
+    onClose, 
+    onForward,
+    message
+  }: {
+    open: boolean;
+    onClose: () => void;
+    onForward: (recipients: string[]) => void;
+    message: ApiMessage | null;
+  }) => {
+    const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+    const contacts = useAppSelector(state => state.user.chatusers);
 
-  return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Forward Message</DialogTitle>
-      <DialogContent>
-        {message && (
-          <div style={{ padding: '10px', marginBottom: '15px', background: '#f5f5f5' }}>
-            {message.content}
-          </div>
-        )}
-        <List>
-          {contacts.map(contact => (
-            <ListItem key={contact.id}>
-              <Checkbox
-                checked={selectedRecipients.includes(contact.id)}
-                onChange={() => setSelectedRecipients(prev => 
-                  prev.includes(contact.id) 
-                    ? prev.filter(id => id !== contact.id) 
-                    : [...prev, contact.id]
-                )}
-              />
-              <ListItemText primary={contact.name} />
-            </ListItem>
-          ))}
-        </List>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button 
-          onClick={() => {
-            onForward(selectedRecipients);
-            onClose();
-          }}
-          disabled={!selectedRecipients.length}
-        >
-          Forward
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
+    const handleForwardClick = () => {
+      onForward(selectedRecipients);
+      setSelectedRecipients([]);
+      onClose();
+    };
 
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Forward Message</DialogTitle>
+        <DialogContent>
+          {message && (
+            <div style={{ 
+              padding: '10px', 
+              marginBottom: '15px', 
+              background: '#f5f5f5',
+              borderRadius: '8px',
+              border: '1px solid #e0e0e0'
+            }}>
+              <strong>Message:</strong> {message.content}
+            </div>
+          )}
+          <List>
+            {contacts?.map(contact => (
+              <ListItem key={contact.id}>
+                <Checkbox
+                  checked={selectedRecipients.includes(contact.id)}
+                  onChange={() => setSelectedRecipients(prev => 
+                    prev.includes(contact.id) 
+                      ? prev.filter(id => id !== contact.id) 
+                      : [...prev, contact.id]
+                  )}
+                />
+                <ListItemText 
+                  primary={contact.name} 
+                  secondary={contact.name || contact.id}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} color="inherit">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleForwardClick}
+            disabled={!selectedRecipients.length}
+            variant="contained"
+            color="primary"
+          >
+            Forward to {selectedRecipients.length} contact{selectedRecipients.length !== 1 ? 's' : ''}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
 
   if (!currentUserId || !receiverId || !contact) {
     return <div>Loading chat data...</div>;
@@ -269,9 +330,78 @@ const ForwardDialog = ({
         }
         onReplyMessage={handleReplyMessage}
         onForwardMessage={handleForwardMessage}
+        onDeleteMessage={handleDeleteMessage}
       />
 
       <div ref={messagesEndRef} />
+
+      {/* Reply Context */}
+      {replyingTo && (
+        <div style={{ 
+          padding: '0.75rem', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '8px',
+          margin: '0.5rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          border: '1px solid #4caf50'
+        }}>
+          <div>
+            <strong>Replying to:</strong>
+            <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '2px' }}>
+              {replyingTo.content.substring(0, 50)}
+              {replyingTo.content.length > 50 ? '...' : ''}
+            </div>
+          </div>
+          <button 
+            onClick={clearReply}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              fontSize: '1.2rem', 
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Forward Context */}
+      {forwarding && (
+        <div style={{ 
+          padding: '0.75rem', 
+          backgroundColor: '#e3f2fd', 
+          borderRadius: '8px',
+          margin: '0.5rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          border: '1px solid #2196f3'
+        }}>
+          <div>
+            <strong>Forwarding:</strong>
+            <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '2px' }}>
+              {forwarding.content.substring(0, 50)}
+              {forwarding.content.length > 50 ? '...' : ''}
+            </div>
+          </div>
+          <button 
+            onClick={clearForward}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              fontSize: '1.2rem', 
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <ChatInput
         currentUserId={currentUserId}
@@ -280,38 +410,25 @@ const ForwardDialog = ({
         channelId={channelId}
         onMessageSent={handleMessageSend}
         onTyping={handleTyping}
+        replyingTo={replyingTo}
+        forwarding={forwarding}
       />
 
-       {replyingToMessageId && (
-          <div style={{ 
-            padding: '0.5rem', 
-            backgroundColor: '#f5f5f5', 
-            borderRadius: '4px',
-            marginBottom: '0.5rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>Replying to message...</span>
-            <button onClick={clearReply}>×</button>
-          </div>
-        )}
-
-        {/* Forward Context */}
-        {forwardingMessageId && (
-          <div style={{ 
-            padding: '0.5rem', 
-            backgroundColor: '#e3f2fd', 
-            borderRadius: '4px',
-            marginBottom: '0.5rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>Select users to forward to...</span>
-            <button onClick={clearForward}>×</button>
-          </div>
-        )}
+      {/* Forward Dialog */}
+      <ForwardDialog
+        open={showForwardDialog}
+        onClose={() => {
+          setShowForwardDialog(false);
+          clearForward();
+        }}
+        onForward={(recipients) => {
+          console.log("Forwarding to:", recipients);
+          // Implement actual forward logic here
+          setShowForwardDialog(false);
+          clearForward();
+        }}
+        message={forwarding}
+      />
 
       {showStatusView && (
         <StatusView

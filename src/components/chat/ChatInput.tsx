@@ -16,6 +16,7 @@ import axios from "axios";
 import { uploadThroughBackend, uploadToCloudinary } from "@/axios/cloudinaryService";
 import { postApi } from "@/axios/apiService";
 import { socketService } from "@/lib/socket";
+import { ApiMessage } from "@/types/chatTypes";
 
 interface ChatInputProps {
   currentUserId: string;
@@ -24,6 +25,8 @@ interface ChatInputProps {
   channelId: string;
   onMessageSent: (msg: any) => void;
   onTyping?: (isTyping: boolean) => void;
+   replyingTo?: ApiMessage | null;    
+  forwarding?: ApiMessage | null;
 }
 
 export default function ChatInput({

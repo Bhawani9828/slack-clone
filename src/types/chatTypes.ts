@@ -32,6 +32,7 @@ export interface ChatUser {
   id?: string;
   _id?: string;
   name: string;
+  username?: string;
   lastMessage: string;
   time: string;
   unreadCount?: number;
@@ -90,7 +91,7 @@ export interface ApiMessage extends BaseMessage {
   // senderId?: string;
   receiverId: string;
   content: string;
-  type: "text" | "image" | "file";
+ type: "text" | "image" | "file" | "video";
   fileUrl?: string;
   fileName?: string;
   fileSize?: string;

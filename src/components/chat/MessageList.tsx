@@ -56,6 +56,7 @@ interface MessageListProps {
   formatTime: (dateString: string) => string
   onReplyMessage?: (messageId: string) => void
   onForwardMessage?: (messageId: string) => void
+  onDeleteMessage?: (messageId: string) => void 
 }
 
 export default function MessageList({ messages, currentUserId, formatTime, onReplyMessage, onForwardMessage  }: MessageListProps) {
@@ -289,12 +290,11 @@ export default function MessageList({ messages, currentUserId, formatTime, onRep
     return "U"
   }
 
-  // Dropdown handlers
-  // Message action handlers
+  
   const handleReplyMessage = useCallback((messageId: string) => {
     console.log(`Replying to message: ${messageId}`)
     onReplyMessage?.(messageId)
-    // You can implement reply logic here or pass it up to parent
+   
   }, [onReplyMessage])
 
   const handleForwardMessage = useCallback((messageId: string) => {
@@ -303,23 +303,16 @@ export default function MessageList({ messages, currentUserId, formatTime, onRep
     // You can implement forward logic here or pass it up to parent
   }, [onForwardMessage])
 
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    console.log(`Deleting message: ${messageId}`)
-    // Optimistic update - remove from local state immediately
-    useEffect(() => {
-  setLocalMessages(prev => {
-    const deletedIds = prev.filter(p => !messages.some(m => m._id === p._id)).map(m => m._id)
-    const enriched = messages
-      .filter(m => !deletedIds.includes(m._id))
-      .map(m => ({
-        ...m,
-        avatar: avatarMap[typeof m.senderId === "string" ? m.senderId : m.senderId._id] || "",
-      }))
-    return enriched
-  })
-}, [messages, avatarMap])
-    // The actual deletion is handled by the MessageDropdown component
-  }, [])
+const handleDeleteMessage = useCallback((messageId: string) => {
+  console.log(`Deleting message: ${messageId}`);
+
+ 
+  setLocalMessages(prev =>
+    prev.filter(msg => msg._id !== messageId)
+  );
+
+  
+}, []);
 
   return (
  <Box

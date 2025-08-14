@@ -1,10 +1,14 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Avatar, IconButton, CircularProgress } from "@mui/material";
 import { Close, Refresh } from "@mui/icons-material";
 import { getApi, postApi } from "@/axios/apiService";
 import API_ENDPOINTS from "@/axios/apiEndpoints";
 import AddStatusModal from "../status/AddStatusModal";
+import StoryProgressBar from "./ProgressBarStatus";
+import { useSelector } from "react-redux";
+import { RootState } from "@/lib/store";
+
 
 interface StatusViewProps {
   isDark: boolean;
@@ -38,6 +42,7 @@ export default function StatusView({
   statusUserId,
   onStatusClick 
 }: StatusViewProps) {
+  const chatusers = useSelector((state: RootState) => state.user.chatusers);
   const [statusUpdates, setStatusUpdates] = useState<Status[]>([]);
   const [viewedUpdates, setViewedUpdates] = useState<Status[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +53,7 @@ export default function StatusView({
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentUserInfo, setCurrentUserInfo] = useState<any>(null);
   const [mediaLoading, setMediaLoading] = useState<{[key: string]: boolean}>({});
+  const [isPaused, setIsPaused] = useState(false);
 
   const bgColor = isDark ? "bg-gray-900" : "bg-white";
   const borderColor = isDark ? "border-gray-700" : "border-gray-300";
@@ -77,6 +83,15 @@ export default function StatusView({
 
     setCurrentUserInfo(userInfo);
   }, [currentUserId]);
+
+  // Pause/resume handlers
+  const handlePause = useCallback(() => {
+    setIsPaused(true);
+  }, []);
+
+  const handleResume = useCallback(() => {
+    setIsPaused(false);
+  }, []);
 
   const fetchStatuses = async () => {
     try {
@@ -134,8 +149,6 @@ export default function StatusView({
     }
   };
 
-  
-
   useEffect(() => {
     fetchStatuses();
   }, [currentUserId, statusUserId]);
@@ -161,10 +174,10 @@ export default function StatusView({
 
   const markStatusAsViewed = async (statusId: string) => {
     try {
-      await fetch(API_ENDPOINTS.STATUS.MARK_VIEWED(statusId)), {
+      await fetch(API_ENDPOINTS.STATUS.MARK_VIEWED(statusId), {
         method: 'POST',
         credentials: 'include'
-      };
+      });
       
       setStatusUpdates(prev => prev.filter(status => status._id !== statusId));
       setViewedUpdates(prev => {
@@ -194,24 +207,35 @@ export default function StatusView({
       setCurrentUserStories(userStories);
       setCurrentView('story');
       setCurrentStoryIndex(0);
+      setIsPaused(false);
       markStatusAsViewed(userStories[0]._id);
     }
   };
 
-  const handleNextStory = () => {
+  const handleNextStory = useCallback(() => {
     if (currentStoryIndex < currentUserStories.length - 1) {
-      setCurrentStoryIndex(currentStoryIndex + 1);
-      markStatusAsViewed(currentUserStories[currentStoryIndex + 1]._id);
+      const nextIndex = currentStoryIndex + 1;
+      setCurrentStoryIndex(nextIndex);
+      markStatusAsViewed(currentUserStories[nextIndex]._id);
     } else {
       setCurrentView('list');
+      setCurrentStoryIndex(0);
     }
-  };
+  }, [currentStoryIndex, currentUserStories]);
 
-  const handlePrevStory = () => {
+  const handlePrevStory = useCallback(() => {
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(currentStoryIndex - 1);
     }
-  };
+  }, [currentStoryIndex]);
+
+  const handleProgressComplete = useCallback(() => {
+    handleNextStory();
+  }, [handleNextStory]);
+
+  const handleSegmentComplete = useCallback((index: number) => {
+    // Optional: Handle individual segment completion
+  }, []);
 
   const handleMediaLoad = (statusId: string) => {
     setMediaLoading(prev => ({
@@ -283,7 +307,6 @@ export default function StatusView({
     }
   };
 
-  
   // Find current user's status
   const myStatus = [...statusUpdates, ...viewedUpdates].find(status => status.userId._id === currentUserId);
 
@@ -294,48 +317,61 @@ export default function StatusView({
       </div>
     );
   }
-
-  if (currentView === 'story' && currentUserStories.length > 0) {
-    const currentStory = currentUserStories[currentStoryIndex];
+const DEFAULT_AVATAR = "/default-avatar.png";
+ if (currentView === 'story' && currentUserStories?.length > 0) {
+  const currentStory = currentUserStories[currentStoryIndex];
+  const currentStoryUser = currentStory.userId;
+ const currentStoryUserAvatar = chatusers.find(u => u.id === currentStoryUser?._id)?.profilePicture 
+    || currentStoryUser?.avatar 
+    || DEFAULT_AVATAR;
     return (
-      <div className={`h-screen w-80 ${bgColor} relative`}>
+      <div className={`h-screen w-100 ${bgColor} relative`}>
         {/* Story View Header */}
-        <div className="absolute top-0 left-0 right-0 p-4 z-10 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <div className="p-0.5 rounded-full bg-gradient-to-r from-[#25d366] to-[#128c7e]">
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-white dark:bg-gray-800">
-                <img
-                  src={currentStory.userId.avatar || "/default-avatar.png"}
-                  alt={currentStory.userId.name}
-                  className="w-full h-full object-cover"
-                />
+        <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/50 to-transparent">
+          {/* Progress Bar */}
+          <StoryProgressBar
+            segments={currentUserStories.length}
+            currentIndex={currentStoryIndex}
+            duration={5000} // 5 seconds per story
+            isPaused={isPaused}
+            onComplete={handleProgressComplete}
+            onSegmentComplete={handleSegmentComplete}
+          />
+          
+          {/* Header Info */}
+          <div className="flex justify-between items-center px-4 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-white">
+             <Avatar
+  src={currentStoryUserAvatar}
+  alt={currentStoryUser?.name || "User"}
+  sx={{ width: 32, height: 32 }}
+/>
+              </div>
+              <div>
+                <span className="text-white text-sm font-medium">{currentStory.userId.name}</span>
+                <p className="text-white/80 text-xs">{formatTime(currentStory.createdAt)}</p>
               </div>
             </div>
-            <span className={textColor}>{currentStory.userId.name}</span>
+            <IconButton onClick={() => setCurrentView('list')} size="small">
+              <Close className="text-white text-xl" />
+            </IconButton>
           </div>
-          <IconButton onClick={() => setCurrentView('list')}>
-            <Close className={textColor} />
-          </IconButton>
-        </div>
-
-        {/* Story Progress Bars */}
-        <div className="absolute top-14 left-0 right-0 flex space-x-1 px-2 z-10">
-          {currentUserStories.map((_, index) => (
-            <div 
-              key={index}
-              className={`h-1 flex-1 rounded-full ${index <= currentStoryIndex ? 'bg-white' : 'bg-gray-500 bg-opacity-50'}`}
-            />
-          ))}
         </div>
 
         {/* Story Content */}
         <div 
-          className="h-full w-full flex items-center justify-center bg-[#01aa8552]"
-          onClick={handleNextStory}
+          className="h-full w-full flex items-center justify-center bg-black select-none"
+          onMouseDown={handlePause}
+          onMouseUp={handleResume}
+          onMouseLeave={handleResume}
+          onTouchStart={handlePause}
+          onTouchEnd={handleResume}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {mediaLoading[currentStory._id] && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <CircularProgress />
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <CircularProgress className="text-white" />
             </div>
           )}
           
@@ -346,6 +382,7 @@ export default function StatusView({
               className={`max-h-full max-w-full object-contain ${mediaLoading[currentStory._id] ? 'opacity-0' : 'opacity-100'}`}
               onLoad={() => handleMediaLoad(currentStory._id)}
               onError={() => handleMediaError(currentStory._id)}
+              draggable={false}
             />
           )}
           
@@ -354,6 +391,7 @@ export default function StatusView({
               src={currentStory.videoUrl} 
               controls
               autoPlay
+              muted
               className={`max-h-full max-w-full ${mediaLoading[currentStory._id] ? 'opacity-0' : 'opacity-100'}`}
               onLoadedData={() => handleMediaLoad(currentStory._id)}
               onError={() => handleMediaError(currentStory._id)}
@@ -361,31 +399,55 @@ export default function StatusView({
           )}
           
           {currentStory.text && !currentStory.imageUrl && !currentStory.videoUrl && (
-            <div className={`p-4 text-center ${textColor}`}>
-              <p className="text-xl">{currentStory.text}</p>
+            <div className="p-8 text-center max-w-md">
+              <p className="text-white text-2xl font-medium leading-relaxed">{currentStory.text}</p>
+            </div>
+          )}
+          
+          {/* Story text overlay for images/videos */}
+          {currentStory.text && (currentStory.imageUrl || currentStory.videoUrl) && (
+            <div className="absolute bottom-20 left-4 right-4 z-10">
+              <p className="text-white text-lg font-medium bg-black/30 p-3 rounded-lg backdrop-blur-sm">
+                {currentStory.text}
+              </p>
             </div>
           )}
         </div>
 
-        {/* Navigation Arrows */}
-        <div className="absolute inset-0 flex justify-between items-center">
+        {/* Navigation Areas */}
+        <div className="absolute inset-0 flex z-10">
+          {/* Left side - Previous story */}
           <div 
-            className="h-full w-1/3 cursor-pointer"
+            className="w-1/3 h-full cursor-pointer"
             onClick={handlePrevStory}
           />
+          
+          {/* Right side - Next story */}
           <div 
-            className="h-full w-1/3 cursor-pointer"
+            className="w-2/3 h-full cursor-pointer"
             onClick={handleNextStory}
           />
         </div>
+
+        {/* Pause indicator */}
+        {isPaused && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+            <div className="bg-black/70 rounded-full p-4 backdrop-blur-sm">
+              <div className="flex space-x-1">
+                <div className="w-1 h-8 bg-white rounded-full"></div>
+                <div className="w-1 h-8 bg-white rounded-full"></div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
-  }
+  } 
 
-  // List View
+  // List View (rest of your existing list view code remains the same)
   return (
     <>
-     <div className={`h-screen w-100 ${bgColor} border-r ${borderColor} flex flex-col transition-all duration-300 ease-in-out`}>
+      <div className={`h-screen w-100 ${bgColor} border-r ${borderColor} flex flex-col transition-all duration-300 ease-in-out`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => handleStoryClick(currentUserId)}>
@@ -506,7 +568,6 @@ export default function StatusView({
                       </p>
                     </div>
                   </div>
-                  {/* {renderMediaPreview(status)} */}
                 </div>
               ))
             ) : (
@@ -569,7 +630,6 @@ export default function StatusView({
                       </p>
                     </div>
                   </div>
-                  {/* {renderMediaPreview(status)} */}
                 </div>
               ))
             ) : (

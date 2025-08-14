@@ -109,6 +109,7 @@ export const fetchChatUsers = createAsyncThunk(
         return usersResponse.map((user) => {
           const { time, isOnline } = formatLastSeen(user.lastSeen);
           
+          
           // Find messages for this user with proper typing
           const userMessages = messagesResponse.filter((msg) => 
             msg.lastMessage?.receiverId === user._id || 

@@ -1,13 +1,15 @@
 // hooks/useMessageActions.ts - Complete React hook for message actions
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { socketService } from '@/lib/socket';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/lib/store';
+import { removeMessage } from '@/lib/store/chatSlice';
 
 interface UseMessageActionsReturn {
   loading: boolean;
   error: string | null;
-  deleteMessage: (messageId: string) => Promise<void>;
+   deleteMessage: (messageId: string) => Promise<void>;
+  hardDeleteMessage: (messageId: string) => Promise<void>;
   replyToMessage: (data: ReplyData) => Promise<any>;
   forwardMessage: (data: ForwardData) => Promise<void>;
   toggleFavorite: (messageId: string, isFavorite: boolean) => Promise<void>;
@@ -29,12 +31,14 @@ interface ForwardData {
 }
 
 export const useMessageActions = (): UseMessageActionsReturn => {
+   const dispatch = useDispatch();
    const currentUser = useSelector((state: RootState) => state.user.currentUser);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
+  
   const handleError = useCallback((err: any, fallbackMessage: string) => {
     const errorMessage = err?.message || err || fallbackMessage;
     setError(errorMessage);
@@ -62,20 +66,31 @@ export const useMessageActions = (): UseMessageActionsReturn => {
 
 
 
-  const deleteMessage = useCallback(async (messageId: string): Promise<void> => {
-    if (!messageId) {
-      throw new Error('Message ID is required');
-    }
-
-    if (!currentUser?._id) {
-    throw new Error('User ID is missing');
+ const deleteMessage = useCallback(async (messageId: string) => {
+  setLoading(true);
+  setError(null);
+  try {
+    await socketService.deleteMessage(messageId);
+    dispatch(removeMessage({ messageId })); // ✅ only pass messageId
+  } catch (err: any) {
+    setError(err?.message || 'Failed to delete message');
+  } finally {
+    setLoading(false);
   }
+}, [dispatch]);
 
-    return executeWithLoading(
-      () => socketService.deleteMessage(messageId, currentUser._id),
-      'Failed to delete message'
-    );
-  },  [executeWithLoading, currentUser]);
+const hardDeleteMessage = useCallback(async (messageId: string) => {
+  setLoading(true);
+  setError(null);
+  try {
+    await socketService.hardDeleteMessage(messageId);
+    dispatch(removeMessage({ messageId })); // ✅ only pass messageId
+  } catch (err: any) {
+    setError(err?.message || 'Failed to hard delete message');
+  } finally {
+    setLoading(false);
+  }
+}, [dispatch]);
 
   const replyToMessage = useCallback(async (data: ReplyData): Promise<any> => {
     if (!data.originalMessageId || !data.receiverId || !data.content?.trim()) {
@@ -156,7 +171,8 @@ export const useMessageActions = (): UseMessageActionsReturn => {
   return {
     loading,
     error,
-    deleteMessage,
+      deleteMessage,
+    hardDeleteMessage,
     replyToMessage,
     forwardMessage,
     toggleFavorite,

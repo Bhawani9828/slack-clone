@@ -276,41 +276,50 @@ joinChannel(chatId: string) {
 
   
   // Message Action Methods (Socket-first with REST fallback)
-  async deleteMessage(messageId: string, userId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        // Fallback to REST API
-        this.deleteMessageViaAPI(messageId, userId).then(resolve).catch(reject);
-        return;
-      }
-
-      this.socket.emit('deleteMessage', { messageId, userId }, (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  async hardDeleteMessage(messageId: string, userId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+// Soft delete
+deleteMessage(messageId: string) {
+  return new Promise<void>((resolve, reject) => {
     if (!this.socket?.connected) {
-      // REST fallback
-      this.hardDeleteMessageViaAPI(messageId, userId).then(resolve).catch(reject);
-      return;
+      return reject('Socket not connected');
     }
 
-    this.socket.emit('hardDeleteMessage', { messageId, userId }, (response: any) => {
-      if (response?.error) {
-        reject(new Error(response.error));
-      } else {
+    // Listen once for confirmation
+    const onDeleted = (data: any) => {
+      if (data?.messageId === messageId) {
+        this.socket?.off('messageDeleted', onDeleted); // cleanup listener
         resolve();
       }
-    });
+    };
+
+    this.socket.on('messageDeleted', onDeleted);
+
+    // Emit deleteMessage event (backend expects this)
+    this.socket.emit('deleteMessage', { messageId, hard: false });
   });
 }
+
+// Hard delete
+hardDeleteMessage(messageId: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!this.socket?.connected) {
+      return reject('Socket not connected');
+    }
+
+    // Listen once for confirmation
+    const onDeleted = (data: any) => {
+      if (data?.messageId === messageId) {
+        this.socket?.off('messageDeleted', onDeleted); // cleanup listener
+        resolve();
+      }
+    };
+
+    this.socket.on('messageDeleted', onDeleted);
+
+    // Emit deleteMessage with hard = true
+    this.socket.emit('deleteMessage', { messageId, hard: true });
+  });
+}
+
 
   async replyToMessage(data: {
     originalMessageId: string;

@@ -11,6 +11,13 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+  Box,
 } from "@mui/material";
 import {
   MoreHoriz as MoreHorizIcon,
@@ -20,7 +27,10 @@ import {
   Favorite as FavoriteIcon,
   FavoriteBorder as FavoriteBorderIcon,
   Delete as DeleteIcon,
+  DeleteForever as DeleteForeverIcon,
   Info as InfoIcon,
+  PersonRemove as PersonRemoveIcon,
+  Warning as WarningIcon,
 } from "@mui/icons-material";
 import { useMessageActions } from "@/hooks/useMessageActions";
 
@@ -54,13 +64,17 @@ export default function MessageDropdown({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [currentFavoriteState, setCurrentFavoriteState] =
-    useState(isFavorite);
+  const [currentFavoriteState, setCurrentFavoriteState] = useState(isFavorite);
+  
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteType, setDeleteType] = useState<'soft' | 'hard' | null>(null);
 
   const {
     loading,
     error,
     deleteMessage,
+    hardDeleteMessage,
     toggleFavorite,
     copyMessage,
     clearError,
@@ -138,23 +152,44 @@ export default function MessageDropdown({
     handleClose,
   ]);
 
-  const handleDelete = useCallback(async () => {
-    try {
-      await deleteMessage(messageId);
-      onDelete(messageId);
-      showSuccessMessage("Message deleted successfully!");
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
-    handleClose();
-  }, [messageId, deleteMessage, onDelete, showSuccessMessage, handleClose]);
-
   const handleInfo = useCallback(() => {
     if (onInfo) {
       onInfo(messageId);
     }
     handleClose();
   }, [messageId, onInfo, handleClose]);
+
+  // Delete confirmation handlers
+  const handleDeleteClick = useCallback((type: 'soft' | 'hard') => {
+    setDeleteType(type);
+    setDeleteDialogOpen(true);
+    handleClose();
+  }, [handleClose]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteType) return;
+
+    try {
+      if (deleteType === 'soft') {
+        await deleteMessage(messageId);
+        showSuccessMessage("Message deleted for you!");
+      } else {
+        await hardDeleteMessage(messageId);
+        showSuccessMessage("Message permanently deleted for everyone!");
+      }
+      onDelete(messageId);
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+    
+    setDeleteDialogOpen(false);
+    setDeleteType(null);
+  }, [deleteType, messageId, deleteMessage, hardDeleteMessage, onDelete, showSuccessMessage]);
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteDialogOpen(false);
+    setDeleteType(null);
+  }, []);
 
   if (!messageId) {
     return null;
@@ -212,10 +247,36 @@ export default function MessageDropdown({
 
     isSentByCurrentUser && <Divider key="divider" sx={{ my: 0.5 }} />,
 
+    // Improved Delete Options
     isSentByCurrentUser && (
       <MenuItem
-        key="delete"
-        onClick={handleDelete}
+        key="delete-for-me"
+        onClick={() => handleDeleteClick('soft')}
+        sx={{
+          color: "#f57c00",
+          "&:hover": {
+            backgroundColor: "rgba(245, 124, 0, 0.04)",
+          },
+        }}
+      >
+        <ListItemIcon>
+          <PersonRemoveIcon fontSize="small" sx={{ color: "#f57c00" }} />
+        </ListItemIcon>
+        <ListItemText 
+          primary="Delete for Me"
+          secondary="Others can still see this message"
+          secondaryTypographyProps={{
+            fontSize: "0.75rem",
+            color: "#666"
+          }}
+        />
+      </MenuItem>
+    ),
+
+    isSentByCurrentUser && (
+      <MenuItem
+        key="delete-for-everyone"
+        onClick={() => handleDeleteClick('hard')}
         sx={{
           color: "#d32f2f",
           "&:hover": {
@@ -224,12 +285,19 @@ export default function MessageDropdown({
         }}
       >
         <ListItemIcon>
-          <DeleteIcon fontSize="small" sx={{ color: "#d32f2f" }} />
+          <DeleteForeverIcon fontSize="small" sx={{ color: "#d32f2f" }} />
         </ListItemIcon>
-        <ListItemText primary="Delete" />
+        <ListItemText 
+          primary="Delete for Everyone"
+          secondary="Permanently removed for all"
+          secondaryTypographyProps={{
+            fontSize: "0.75rem",
+            color: "#666"
+          }}
+        />
       </MenuItem>
     ),
-  ].filter(Boolean); // false/null/undefined remove
+  ].filter(Boolean);
 
   return (
     <div>
@@ -287,7 +355,7 @@ export default function MessageDropdown({
           "& .MuiPaper-root": {
             boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
             borderRadius: "8px",
-            minWidth: "160px",
+            minWidth: "200px", // Increased width for secondary text
             py: 0.5,
           },
           "& .MuiMenuItem-root": {
@@ -303,6 +371,69 @@ export default function MessageDropdown({
       >
         {menuItems}
       </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleCancelDelete}
+        aria-labelledby="delete-dialog-title"
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle id="delete-dialog-title" sx={{ pb: 1 }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <WarningIcon color={deleteType === 'hard' ? 'error' : 'warning'} />
+            <Typography variant="h6">
+              {deleteType === 'hard' ? 'Delete for Everyone?' : 'Delete Message?'}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          <Typography variant="body1" color="text.secondary">
+            {deleteType === 'hard' 
+              ? 'This message will be permanently deleted for all participants in this conversation. This action cannot be undone.'
+              : 'This message will be deleted from your view, but other participants will still be able to see it.'
+            }
+          </Typography>
+          
+          {deleteType === 'hard' && (
+            <Box 
+              sx={{ 
+                mt: 2, 
+                p: 2, 
+                bgcolor: 'error.light', 
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'error.main'
+              }}
+            >
+              <Typography variant="body2" color="black" fontWeight="medium">
+                ⚠️ Warning: This will permanently delete the message for everyone!
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={handleCancelDelete}
+            color="inherit"
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color={deleteType === 'hard' ? 'error' : 'warning'}
+            variant="contained"
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={16} /> : null}
+          >
+            {deleteType === 'hard' ? 'Delete for Everyone' : 'Delete for Me'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={showSuccess}

@@ -65,6 +65,8 @@ export const optimizedChatSlice = createSlice({
   name: 'optimizedChat',
   initialState,
   reducers: {
+
+
     // Connection management
     setConnected: (state, action: PayloadAction<boolean>) => {
       state.isConnected = action.payload;
@@ -139,9 +141,18 @@ export const optimizedChatSlice = createSlice({
       }
     },
 
+    removeMessage: (
+  state,
+  action: PayloadAction<{ messageId: string }>
+) => {
+  state.messages = state.messages.filter(
+    msg => msg._id !== action.payload.messageId
+  );
+},
+
     updateMessageStatus: (state, action: PayloadAction<{
       messageId: string;
-      status: 'delivered' | 'read';
+      status: 'delivered' | 'read' | "error";
     }>) => {
       const { messageId, status } = action.payload;
       const message = state.messages.find(msg => msg._id === messageId);
@@ -370,6 +381,7 @@ export const {
   // Messages
   setMessages,
   addMessage,
+  removeMessage,
   updateMessageStatus,
   clearMessages,
   bulkUpdateMessages,
