@@ -1,6 +1,6 @@
 // components/layout/Sidebar.tsx
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSelector, useDispatch } from 'react-redux';
 import { Avatar, IconButton, TextField, InputAdornment } from "@mui/material";
 import {
@@ -13,6 +13,9 @@ import {
   Call,
   Contacts,
   PersonSearchRounded,
+  Group,
+  PlusOne,
+  GroupAddRounded
 } from "@mui/icons-material";
 
 import { getApi } from "@/axios/apiService";
@@ -34,11 +37,16 @@ import {
   setActiveCallFilter,
   setIsLeftNavOpen,
   setSelectedUser,
+   setSelectedGroup,
   setShowStatusView,
+  setChatType,
   setStatusUserId,
   backToChat
 } from '@/lib/store/slices/sidebarSlice';
 import { AppDispatch } from "@/lib/store";
+import CreateGroupDialog from "../group/CreateGroupDialog";
+import GroupListView from "../group/GroupListView";
+import { ChatGroup } from "@/types/chatTypes";
 
 interface RootState {
   sidebar: {
@@ -48,6 +56,8 @@ interface RootState {
     activeCallFilter: "all" | "incoming" | "outgoing" | "missed";
     isLeftNavOpen: boolean;
     selectedUser: any;
+    selectedGroup: any;
+    chatType: "direct" | "group" | null;
     showStatusView: boolean;
     statusUserId: string | null;
   };
@@ -61,14 +71,19 @@ interface RootState {
 
 export default function Sidebar({
   onContactSelect,
+  onGroupSelect,
   isDark,
   initialSelectedUserId
 }: {
   onContactSelect?: (contactId: string) => void;
+   onGroupSelect?: (group: ChatGroup) => void;
   isDark: boolean;
   initialSelectedUserId: string | null;
 }) {
   const dispatch = useDispatch<AppDispatch>();
+    // const [chatType, setChatType] = useState<'direct' | 'group'>('direct');
+  const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
+ 
   const {
     activeView,
     chatAreaActiveTab,
@@ -76,12 +91,15 @@ export default function Sidebar({
     activeCallFilter,
     isLeftNavOpen,
     selectedUser,
+    selectedGroup,
+    chatType,
     showStatusView,
     statusUserId
   } = useSelector((state: RootState) => state.sidebar);
 
   const { chatusers, isLoadingUsers,  currentUser } = useSelector((state: RootState) => state.user);
-  
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const initialSelectionMade = useRef(false);
 
   useEffect(() => {
@@ -116,6 +134,30 @@ export default function Sidebar({
     if (user) {
       dispatch(setSelectedUser(user));
       onContactSelect?.(id);
+    }
+  };
+
+const handleGroupClick = (group: ChatGroup) => {
+ onGroupSelect?.(group);
+};
+
+  const handleCreateGroup = async (groupData: {
+    name: string;
+    description?: string;
+    participants: string[];
+    groupImage?: string;
+  }) => {
+    try {
+      console.log('Creating group:', groupData);
+      // TODO: Implement API call to create group
+      // const response = await postApi(API_ENDPOINTS.CREATE_GROUP, groupData);
+      // console.log('Group created:', response);
+      
+      // For now, just log the data
+      alert(`Group "${groupData.name}" created with ${groupData.participants.length} participants!`);
+    } catch (error) {
+      console.error('Error creating group:', error);
+      alert('Failed to create group. Please try again.');
     }
   };
 
@@ -203,12 +245,27 @@ export default function Sidebar({
         
       {/* Tab Navigation */}
       <div className={`px-4 py-2 ${bgColor} border-b ${borderColor}`}>
-        <div className="flex items-center justify-between mb-3">
-          <h4 className={`font-medium ${textColor}`}>Message ({chatusers.length})</h4>
-          <IconButton size="small" className={`${isDark ? "text-gray-300 !bg-[#043429]"  : "text-gray-600 !bg-gray-200"}`}>
-            <PersonSearchRounded className={`${isDark ? "!text-white   "  : "!text-black  "}`} />
-          </IconButton>
-        </div>
+       <div className="flex items-center justify-between mb-3">
+  <h4 className={`font-medium ${textColor}`}>
+    Message ({chatusers.length})
+  </h4>
+  <div className="flex items-center space-x-2">
+   
+
+    {/* Add Group Button */}
+    <IconButton
+      size="small"
+      onClick={() => setShowCreateGroupDialog(true)}
+      className={`${
+        isDark ? "text-gray-300 !bg-[#043429]" : "text-gray-600 !bg-gray-200"
+      }`}
+    >
+      <GroupAddRounded
+        className={`${isDark ? "!text-white" : "!text-black"}`}
+      />
+    </IconButton>
+  </div>
+</div>
         
         <div className="flex space-x-2 mb-3">
           <button
@@ -252,12 +309,29 @@ export default function Sidebar({
         </div>
         
         <div className="flex space-x-2">
-          <button className="px-4 py-2 w-full rounded-lg text-sm font-medium bg-[#01aa85] text-white">Direct</button>
-          <button
-            className={`px-4 py-2 rounded-lg w-full text-sm font-medium ${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+          <button 
+            onClick={() => dispatch(setChatType("direct"))}
+            className={`px-4 py-2 w-full rounded-lg text-sm font-medium transition-colors ${
+              chatType === 'direct'
+                ? "bg-[#01aa85] text-white"
+                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+            }`}
           >
+            Direct
+          </button>
+          <button
+            onClick={() => dispatch(setChatType("group"))}
+            className={`px-4 py-2 rounded-lg w-full text-sm font-medium transition-colors ${
+              chatType === 'group'
+                ? "bg-[#01aa85] text-white"
+                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+            }`}
+          >
+            <Group className="!w-4 !h-4 mr-1 inline" />
             Group
           </button>
+           
+ 
         </div>
       </div>
       
@@ -297,14 +371,30 @@ export default function Sidebar({
       
       {/* Chat List / Call List / Contact List */}
       <div className="flex-1 overflow-y-auto">
-        {chatAreaActiveTab === "chat" && (
-          <ChatListView
-           
-            searchQuery={searchQuery}
-            isDark={isDark}
-             isLoading={isLoadingUsers}
-            onContactClick={handleContactSelect}
-          />
+             {chatAreaActiveTab === "chat" && (
+          <>
+            {chatType === 'direct' ? (
+              <ChatListView
+                searchQuery={searchQuery}
+                isDark={isDark}
+                isLoading={isLoadingUsers}
+                onContactClick={handleContactSelect}
+              />
+            ) : (
+            <GroupListView
+  searchQuery={searchQuery}
+  isDark={isDark}
+   onGroupClick={(groupInfo) =>
+    handleGroupClick({
+      ...groupInfo,
+      members: [], // add empty members
+    })
+  }
+  currentUserId={currentUser?._id} // from Redux user slice
+  selectedGroupId={selectedGroup?._id || null} // from Redux sidebar slice
+/>
+            )}
+          </>
         )}
 
         {chatAreaActiveTab === "call" && (
@@ -325,7 +415,7 @@ export default function Sidebar({
       </div>
       
       {/* Floating Add Button */}
-      <div className="absolute bottom-20 right-6">
+      {/* <div className="absolute bottom-20 right-6">
         <IconButton
           className="bg-[#01aa85] !text-white hover:bg-[#20b858] shadow-lg"
           sx={{
@@ -339,7 +429,15 @@ export default function Sidebar({
           {chatAreaActiveTab === "call" && <Phone />}
           {chatAreaActiveTab === "contact" && <PersonAdd />}
         </IconButton>
-      </div>
+      </div> */}
+
+          {/* Create Group Dialog */}
+      <CreateGroupDialog
+        open={showCreateGroupDialog}
+        onClose={() => setShowCreateGroupDialog(false)}
+        onCreateGroup={handleCreateGroup}
+        isDark={isDark}
+      />
     </div>
   )
 }

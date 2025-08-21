@@ -1,5 +1,5 @@
 // lib/store/optimizedChatSlice.ts
-import { ChatUser, Message, UserProfile } from '@/types/chatTypes';
+import { ChatUser,ChatGroup, Message, UserProfile } from '@/types/chatTypes';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 
@@ -32,7 +32,8 @@ interface ChatState {
   currentChat: {
     channelId: string | null;
     receiverId: string | null;
-    contact: ChatUser | null;
+    groupId: string | null;
+     contact: ChatUser | ChatGroup | null;
   };
   
   // UI state
@@ -53,6 +54,7 @@ const initialState: ChatState = {
   currentChat: {
     channelId: null,
     receiverId: null,
+    groupId: null,
     contact: null,
   },
   isLoading: false,
@@ -261,24 +263,35 @@ export const optimizedChatSlice = createSlice({
     },
 
     // Current chat context
-    setCurrentChat: (state, action: PayloadAction<{
-      channelId: string;
-      receiverId: string;
-      contact: ChatUser;
-    }>) => {
-      state.currentChat = action.payload;
-      
-      // Clear unread count for current chat
-      const userId = action.payload.receiverId;
-      if (userId) {
-        state.unreadCounts[userId] = 0;
-      }
-    },
+setCurrentChat: (
+  state,
+  action: PayloadAction<{
+    channelId: string;
+    receiverId?: string;
+    groupId?: string;
+    contact: ChatUser | ChatGroup;
+  }>
+) => {
+  state.currentChat = {
+    channelId: action.payload.channelId,
+    receiverId: action.payload.receiverId ?? null,
+    groupId: action.payload.groupId ?? null,
+    contact: action.payload.contact,
+  };
 
-    clearCurrentChat: (state) => {
+  if (action.payload.receiverId) {
+    state.unreadCounts[action.payload.receiverId] = 0;
+  }
+  if (action.payload.groupId) {
+    state.unreadCounts[action.payload.groupId] = 0;
+  }
+},
+
+ clearCurrentChat: (state) => {
       state.currentChat = {
         channelId: null,
         receiverId: null,
+        groupId: null,
         contact: null,
       };
     },

@@ -4,12 +4,13 @@ import { socketService } from '@/lib/socket';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/lib/store';
 import { removeMessage } from '@/lib/store/chatSlice';
+import { groupChatSocketService } from '@/lib/group-chat-socket.service';
 
 interface UseMessageActionsReturn {
   loading: boolean;
   error: string | null;
-   deleteMessage: (messageId: string) => Promise<void>;
-  hardDeleteMessage: (messageId: string) => Promise<void>;
+  deleteMessage: (messageId: string, options?: DeleteOptions) => Promise<void>;
+  hardDeleteMessage: (messageId: string, options?: DeleteOptions) => Promise<void>;
   replyToMessage: (data: ReplyData) => Promise<any>;
   forwardMessage: (data: ForwardData) => Promise<void>;
   toggleFavorite: (messageId: string, isFavorite: boolean) => Promise<void>;
@@ -18,6 +19,10 @@ interface UseMessageActionsReturn {
   clearError: () => void;
 }
 
+type DeleteOptions = {
+  isGroupChat: boolean;
+  groupId?: string;
+};
 interface ReplyData {
   originalMessageId: string;
   receiverId: string;
@@ -65,43 +70,67 @@ export const useMessageActions = (): UseMessageActionsReturn => {
   }, [handleError]);
 
 
+const deleteMessage = useCallback(
+  async (messageId: string, options?: DeleteOptions) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (options?.isGroupChat && options.groupId) {
+        await groupChatSocketService.deleteGroupMessage(options.groupId, messageId);
+      } else {
+        await socketService.deleteMessage(messageId);
+      }
 
- const deleteMessage = useCallback(async (messageId: string) => {
-  setLoading(true);
-  setError(null);
-  try {
-    await socketService.deleteMessage(messageId);
-    dispatch(removeMessage({ messageId })); // ✅ only pass messageId
-  } catch (err: any) {
-    setError(err?.message || 'Failed to delete message');
-  } finally {
-    setLoading(false);
-  }
-}, [dispatch]);
-
-const hardDeleteMessage = useCallback(async (messageId: string) => {
-  setLoading(true);
-  setError(null);
-  try {
-    await socketService.hardDeleteMessage(messageId);
-    dispatch(removeMessage({ messageId })); // ✅ only pass messageId
-  } catch (err: any) {
-    setError(err?.message || 'Failed to hard delete message');
-  } finally {
-    setLoading(false);
-  }
-}, [dispatch]);
-
-  const replyToMessage = useCallback(async (data: ReplyData): Promise<any> => {
-    if (!data.originalMessageId || !data.receiverId || !data.content?.trim()) {
-      throw new Error('Reply data is incomplete');
+      dispatch(removeMessage({ messageId }));
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete message");
+    } finally {
+      setLoading(false);
     }
+  },
+  [dispatch]
+);
 
-    return executeWithLoading(
-      () => socketService.replyToMessage(data),
-      'Failed to send reply'
-    );
-  }, [executeWithLoading]);
+const hardDeleteMessage = useCallback(
+  async (messageId: string, options?: DeleteOptions) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (options?.isGroupChat && options.groupId) {
+        await groupChatSocketService.deleteGroupMessage(options.groupId, messageId);
+      } else {
+        await socketService.hardDeleteMessage(messageId);
+      }
+
+      dispatch(removeMessage({ messageId }));
+    } catch (err: any) {
+      setError(err?.message || "Failed to hard delete message");
+    } finally {
+      setLoading(false);
+    }
+  },
+  [dispatch]
+);
+
+const replyToMessage = useCallback(async (data: ReplyData): Promise<any> => {
+  if (!data.originalMessageId || !data.receiverId || !data.content?.trim()) {
+    throw new Error("Reply data is incomplete");
+  }
+
+  return executeWithLoading(async () => {
+    // API call -> save in DB
+    const savedReply = await socketService.replyToMessage(data);
+
+    // ✅ Send via socket so that receiver gets it instantly
+    socketService.getSocket()?.emit("sendMessage", {
+      ...savedReply,
+      type: "reply",
+    });
+
+    return savedReply;
+  }, "Failed to send reply");
+}, [executeWithLoading]);
+
 
   const forwardMessage = useCallback(async (data: ForwardData): Promise<void> => {
     if (!data.messageId || !data.receiverIds?.length) {

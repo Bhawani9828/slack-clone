@@ -12,7 +12,7 @@ interface Props {
 }
 
 const UserAvatar = ({ 
-  userId, 
+  userId = '', 
   name, 
   imageUrl, 
   showTypingIndicator = false,

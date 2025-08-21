@@ -1,4 +1,4 @@
-// components/ChatArea.tsx
+// components/ChatArea.tsx - Updated with Group Chat Support
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApi } from "@/axios/apiService";
@@ -9,13 +9,18 @@ import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import StatusView from "../sidebarComponets/StatusView";
-import { ApiMessage, ChatAreaProps, Message } from "@/types/chatTypes";
+import { 
+  ApiMessage, 
+  ChatAreaProps, 
+  Message, 
+  GroupMessage 
+} from "@/types/chatTypes";
 import { 
   addMessage, 
   setCurrentChat, 
   setLoading, 
   setMessages,
-  updateMessageStatus // Add this import
+  updateMessageStatus
 } from "@/lib/store/chatSlice";
 import { socketService } from "@/lib/socket";
 import { 
@@ -25,10 +30,13 @@ import {
   DialogActions, 
   DialogContent, 
   DialogTitle, 
+  IconButton, 
   List, 
   ListItem, 
-  ListItemText 
+  ListItemText, 
+  TextField
 } from "@mui/material";
+import { Send } from "@mui/icons-material";
 
 export default function ChatArea({
   contact,
@@ -39,11 +47,31 @@ export default function ChatArea({
   currentUserName,
   onVideoCall,
   onVoiceCall,
+  // ✅ Group chat props
+  isGroupChat = false,
+  groupMessages = [],
+  typingUsers = [],
+  onlineUsers = [],
+  onSendGroupMessage,
+  onGroupTyping,
+  onGroupStopTyping,
+  onDeleteGroupMessage,
+  onLoadMoreMessages,
+  isLoadingMessages = false,
+  hasMoreMessages = false,
+  isCurrentUserAdmin = false,
+  canManageGroup = false,
+  participantCount = 0,
+  groupInfo,
+  onLeaveGroup,
+  onAddParticipants,
+  onRemoveParticipant,
+  onChangeAdminStatus,
 }: ChatAreaProps) {
   const dispatch = useAppDispatch();
   const {
-    messages,
-    onlineUsers,
+    messages: directMessages,
+    onlineUsers: directOnlineUsers,
     typingStatus,
     isLoading,
     isConnected,
@@ -59,25 +87,70 @@ export default function ChatArea({
   const [replyingTo, setReplyingTo] = useState<ApiMessage | null>(null);
   const [forwarding, setForwarding] = useState<ApiMessage | null>(null);
   const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
+  const [quickReplyMessage, setQuickReplyMessage] = useState("");
   
-  const { handleTyping } = useChatSocket(channelId, currentUserId, receiverId);
+  // ✅ Determine which hook to use based on chat type
+  const { handleTyping } = useChatSocket(
+    isGroupChat ? "" : channelId, 
+    currentUserId, 
+    isGroupChat ? "" : receiverId
+  );
 
-  // Set current chat when props change
-  useEffect(() => {
-    dispatch(setCurrentChat({ channelId, receiverId, contact }));
-  }, [channelId, receiverId, contact, dispatch]);
+  const getSenderId = (senderId: string | { _id: string; name?: string; username?: string }): string => {
+  if (typeof senderId === 'string') {
+    return senderId;
+  }
+  return senderId._id;
+};
 
-  // Fetch initial messages
+  // ✅ Get appropriate messages based on chat type
+  const messages = isGroupChat ? 
+    groupMessages.map(msg => ({
+      _id: msg._id,
+      senderId: msg.senderId,
+      receiverId: msg.groupId, // Use groupId as receiverId for groups
+      content: msg.content,
+      type: msg.type,
+      createdAt: msg.createdAt,
+      isSent: msg.isSent,
+      isDelivered: msg.isDelivered,
+      isRead: msg.isRead,
+      isError: false,
+      fileUrl: msg.fileUrl || "",
+      fileName: msg.fileName || "",
+      fileSize: msg.fileSize || "",
+      channelId: msg.groupId,
+      replyTo: msg.replyTo,
+      isForwarded: msg.isForwarded,
+      forwardedFrom: msg.forwardedFrom,
+    })) : directMessages;
+
+  // ✅ Get appropriate online users and typing status
+  const currentOnlineUsers = isGroupChat ? onlineUsers : directOnlineUsers;
+  const currentTypingUsers = isGroupChat ? typingUsers : [];
+
+  // Set current chat when props change (only for direct chats)
   useEffect(() => {
+    if (!isGroupChat) {
+      dispatch(setCurrentChat({ channelId, receiverId, contact }));
+    }
+  }, [channelId, receiverId, contact, dispatch, isGroupChat]);
+
+  // Fetch initial messages (only for direct chats)
+
+
+
+
+  useEffect(() => {
+    if (isGroupChat) return; // Skip for group chats, handled by useGroupChat
+
     const fetchMessages = async () => {
       dispatch(setLoading(true));
       try {
-        // Add proper typing to the API response
         const data = await getApi<ApiMessage[]>(API_ENDPOINTS.MESSAGES_CHANNELID(channelId));
         
         const formattedMessages: Message[] = data.map((msg) => ({
           _id: msg._id,
-          // Fix: Ensure senderId is always a string
           senderId: typeof msg.senderId === 'string' 
             ? msg.senderId 
             : msg.senderId?._id || (msg.receiverId === currentUserId ? receiverId : currentUserId),
@@ -92,7 +165,6 @@ export default function ChatArea({
           fileName: msg.fileName || "",
           fileSize: msg.fileSize || "",
           channelId: msg.channelId || channelId,
-          // Add optional fields that might be missing
           isError: false,
           replyTo: msg.replyTo,
           isForwarded: msg.isForwarded,
@@ -110,83 +182,168 @@ export default function ChatArea({
     if (channelId && currentUserId && receiverId) {
       fetchMessages();
     }
-  }, [channelId, currentUserId, receiverId, dispatch]);
+  }, [channelId, currentUserId, receiverId, dispatch, isGroupChat]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleMessageSend = async (msg: any) => {
-    if (!msg?.content) return;
+  // ✅ Enhanced message send handler for both direct and group chats
+ const handleMessageSend = async (msg: any) => {
+  if (!msg?.content) return;
 
-    const newMessage: Message = {
-      _id: `temp-${Date.now()}`,
-      senderId: currentUserId,
-      receiverId,
-      content: msg.content,
-      type: msg.type || "text",
-      createdAt: new Date().toISOString(),
-      isSent: true,
-      isDelivered: false,
-      isRead: false,
-      isError: false,
-      fileUrl: msg.fileUrl || "",
-      fileName: msg.fileName || "",
-      fileSize: msg.fileSize || "",
-      channelId: msg.channelId || channelId,
-      ...(replyingTo && { replyTo: replyingTo._id }),
-      ...(forwarding && { 
-        isForwarded: true,
-        forwardedFrom: forwarding._id,
-      })
-    };
-
-    dispatch(addMessage(newMessage));
-
+  if (isGroupChat && onSendGroupMessage) {
+    // Handle group message
     try {
-      if (isConnected) {
-        if (replyingTo) {
-          await socketService.replyToMessage({
-            originalMessageId: replyingTo._id,
-            receiverId,
-            content: msg.content,
-            type: msg.type || 'text'
-          });
-        } else if (forwarding) {
-          await socketService.forwardMessage({
-            messageId: forwarding._id,
-            receiverIds: [receiverId]
-          });
-        } else {
-          await socketService.sendMessage(newMessage);
-        }
-        
+      await onSendGroupMessage(msg.content, msg.type || "text");
+      
+      // Clear reply/forward state after successful send
+      if (replyingTo) {
         setReplyingTo(null);
+        setReplyingToMessageId(null);
+      }
+      if (forwarding) {
         setForwarding(null);
+        setForwardingMessageId(null);
       }
     } catch (error) {
-      console.error("Send failed:", error);
-      // Fix: Make sure updateMessageStatus action exists in your chatSlice
-      dispatch(updateMessageStatus({ 
-        messageId: newMessage._id,
-        status: 'error' 
-      }));
+      console.error("Failed to send group message:", error);
     }
+    return;
+  }
+
+  // Handle direct message (existing logic with fix)
+  const newMessage: Message = {
+    _id: `temp-${Date.now()}`,
+    senderId: currentUserId,
+    receiverId,
+    content: msg.content,
+    type: msg.type || "text",
+    createdAt: new Date().toISOString(),
+    isSent: true,
+    isDelivered: false,
+    isRead: false,
+    isError: false,
+    fileUrl: msg.fileUrl || "",
+    fileName: msg.fileName || "",
+    fileSize: msg.fileSize || "",
+    channelId: msg.channelId || channelId,
+    ...(replyingTo && { 
+      replyTo: replyingTo._id,
+      replyToContent: replyingTo.content,
+      // ✅ Fixed: Use helper function to get sender ID as string
+      replyToSender: getSenderId(replyingTo.senderId)
+    }),
+    ...(forwarding && { 
+      isForwarded: true,
+      forwardedFrom: forwarding._id,
+    })
   };
 
-  const isReceiverOnline = onlineUsers.includes(receiverId);
+  dispatch(addMessage(newMessage));
 
+  try {
+    if (isConnected) {
+      if (replyingTo) {
+        const replyData = {
+          originalMessageId: replyingTo._id,
+          receiverId,
+          content: msg.content,
+          type: msg.type || 'text',
+          channelId,
+          replyToContent: replyingTo.content,
+          // ✅ Fixed: Use helper function to get sender ID as string
+          replyToSender: getSenderId(replyingTo.senderId)
+        };
+        
+        await socketService.replyToMessage(replyData);
+      } else if (forwarding) {
+        await socketService.forwardMessage({
+          messageId: forwarding._id,
+          receiverIds: [receiverId]
+        });
+      } else {
+        await socketService.sendMessage(newMessage);
+      }
+      
+      if (replyingTo) {
+        setReplyingTo(null);
+        setReplyingToMessageId(null);
+      }
+      if (forwarding) {
+        setForwarding(null);
+        setForwardingMessageId(null);
+      }
+    }
+  } catch (error) {
+    console.error("Send failed:", error);
+    dispatch(updateMessageStatus({ 
+      messageId: newMessage._id,
+      status: 'error' 
+    }));
+  }
+};
+
+  // ✅ Enhanced typing handlers for both chat types
+  const handleTypingStart = () => {
+  if (isGroupChat && onGroupTyping) {
+    onGroupTyping();
+  } else {
+    handleTyping(true); // ✅ Pass boolean parameter
+  }
+};
+
+const handleTypingStop = () => {
+  if (isGroupChat && onGroupStopTyping) {
+    onGroupStopTyping();
+  } else {
+    handleTyping(false); // ✅ Pass boolean parameter for stop typing
+  }
+  // Direct chat typing stop is handled automatically
+};
+
+// Fix 2: Helper function to safely get sender display name
+const getSenderDisplayName = (senderId: string | { _id: string; name?: string; username?: string }): string => {
+  if (typeof senderId === 'string') {
+    return senderId;
+  }
+  return senderId.name || senderId.username || senderId._id || 'Unknown';
+};
+
+  // ✅ Enhanced delete message handler
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    if (isGroupChat && onDeleteGroupMessage) {
+      try {
+        await onDeleteGroupMessage(messageId);
+        console.log("Group message deleted successfully");
+      } catch (error) {
+        console.error("Failed to delete group message:", error);
+      }
+    } else {
+      // Implement direct message delete logic
+      console.log("Deleting direct message:", messageId);
+    }
+  }, [isGroupChat, onDeleteGroupMessage]);
+
+  // Determine if receiver is online
+  const isReceiverOnline = isGroupChat ? 
+    false : // For groups, we don't track single user online status
+    directOnlineUsers.includes(receiverId);
+
+  // ✅ Enhanced chat header contact info
   const chatHeaderContact = {
     ...contact,
-    isOnline: isReceiverOnline,
-    userId: receiverId,
-    status: typingStatus[receiverId] 
-      ? "typing..." 
-      : isReceiverOnline
-      ? "Online"
-      : "Offline",
-    isTyping: typingStatus[receiverId],
+    isOnline: isGroupChat ? true : isReceiverOnline, // Groups are always "online"
+    userId: isGroupChat ? contact.id || contact._id : receiverId,
+    status: isGroupChat ? 
+      (currentTypingUsers.length > 0 ? 
+        `${currentTypingUsers.length} typing...` : 
+        `${participantCount} participants`) :
+      (typingStatus[receiverId] ? 
+        "typing..." : 
+        isReceiverOnline ? "Online" : "Offline"),
+    isTyping: isGroupChat ? currentTypingUsers.length > 0 : typingStatus[receiverId],
   };
 
   const clearReply = useCallback(() => {
@@ -203,10 +360,9 @@ export default function ChatArea({
     const originalMessage = messages.find(msg => msg._id === messageId);
     if (!originalMessage) return;
     
-    // Convert Message to ApiMessage for compatibility
     const apiMessage: ApiMessage = {
       ...originalMessage,
-      senderId: originalMessage.senderId // This is already a string now
+      senderId: originalMessage.senderId
     };
     
     setReplyingTo(apiMessage);
@@ -219,10 +375,9 @@ export default function ChatArea({
     const message = messages.find(msg => msg._id === messageId);
     if (!message) return;
     
-    // Convert Message to ApiMessage for compatibility
     const apiMessage: ApiMessage = {
       ...message,
-      senderId: message.senderId // This is already a string now
+      senderId: message.senderId
     };
     
     setForwarding(apiMessage);
@@ -231,12 +386,6 @@ export default function ChatArea({
     setReplyingToMessageId(null);
     setShowForwardDialog(true);
   }, [messages]);
-
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    // Implement delete message logic here
-    console.log("Deleting message:", messageId);
-    // You might want to add a deleteMessage action to your store
-  }, []);
 
   const ForwardDialog = ({ 
     open, 
@@ -309,18 +458,56 @@ export default function ChatArea({
     );
   };
 
-  if (!currentUserId || !receiverId || !contact) {
+  const handleQuickReply = async () => {
+    if (!quickReplyMessage.trim() || !replyingTo) return;
+    
+    await handleMessageSend({
+      content: quickReplyMessage.trim(),
+      type: 'text',
+      channelId: channelId
+    });
+    
+    setQuickReplyMessage(""); 
+  };
+
+  // ✅ Group-specific handlers
+  const handleLoadMoreGroupMessages = async () => {
+    if (onLoadMoreMessages && hasMoreMessages && !isLoadingMessages) {
+      await onLoadMoreMessages();
+    }
+  };
+
+  if (!currentUserId || (!receiverId && !isGroupChat) || !contact) {
     return <div>Loading chat data...</div>;
   }
 
   return (
     <div className="h-full flex flex-col bg-[#01aa851c]">
+      {/* ✅ Enhanced ChatHeader for groups */}
       <ChatHeader
         contact={chatHeaderContact}
         onVideoCall={onVideoCall}
         onVoiceCall={onVoiceCall}
-        isTyping={typingStatus[receiverId]}
+        isTyping={isGroupChat ? currentTypingUsers.length > 0 : typingStatus[receiverId]}
+        isGroupChat={isGroupChat}
+        participantCount={participantCount}
+        onlineCount={currentOnlineUsers.length}
+        canManageGroup={canManageGroup}
+        onLeaveGroup={onLeaveGroup}
       />
+
+      {/* ✅ Load more messages button for groups */}
+      {/* {isGroupChat && hasMoreMessages && (
+        <div className="px-4 py-2 bg-white border-b">
+          <button 
+            onClick={handleLoadMoreGroupMessages}
+            disabled={isLoadingMessages}
+            className="w-full p-2 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+          >
+            {isLoadingMessages ? "Loading..." : "Load More Messages"}
+          </button>
+        </div>
+      )} */}
 
       <MessageList
         messages={messages}
@@ -331,43 +518,141 @@ export default function ChatArea({
         onReplyMessage={handleReplyMessage}
         onForwardMessage={handleForwardMessage}
         onDeleteMessage={handleDeleteMessage}
+        onReply={(msg) => setReplyingTo(msg)} 
+        isGroupChat={isGroupChat}
+        groupInfo={groupInfo}
+        isCurrentUserAdmin={isCurrentUserAdmin}
       />
 
       <div ref={messagesEndRef} />
 
-      {/* Reply Context */}
-      {replyingTo && (
-        <div style={{ 
-          padding: '0.75rem', 
-          backgroundColor: '#e8f5e8', 
-          borderRadius: '8px',
-          margin: '0.5rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          border: '1px solid #4caf50'
-        }}>
-          <div>
-            <strong>Replying to:</strong>
-            <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '2px' }}>
-              {replyingTo.content.substring(0, 50)}
-              {replyingTo.content.length > 50 ? '...' : ''}
-            </div>
-          </div>
-          <button 
-            onClick={clearReply}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              fontSize: '1.2rem', 
-              cursor: 'pointer',
-              color: '#666'
-            }}
-          >
-            ×
-          </button>
+      {/* ✅ Enhanced typing indicator for groups */}
+      {isGroupChat && currentTypingUsers.length > 0 && (
+        <div className="px-4 py-2 bg-white border-t">
+          <p className="text-sm text-gray-500">
+            {currentTypingUsers.length === 1 
+              ? `${currentTypingUsers[0]} is typing...`
+              : `${currentTypingUsers.length} people are typing...`
+            }
+          </p>
         </div>
       )}
+
+      {/* Reply Context - Enhanced for groups */}
+ {replyingTo && (
+  <div style={{ 
+    padding: '0.75rem', 
+    backgroundColor: '#e8f5e8', 
+    borderRadius: '8px',
+    margin: '0.5rem',
+    border: '1px solid #4caf50'
+  }}>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: '8px'
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ 
+          fontSize: '0.75rem', 
+          color: '#666', 
+          marginBottom: '2px',
+          fontWeight: 'bold'
+        }}>
+          {/* ✅ Fixed sender display - compare IDs properly */}
+          Replying to {getSenderId(replyingTo.senderId) === currentUserId ? 'yourself' : 
+            isGroupChat ? getSenderDisplayName(replyingTo.senderId) : 'contact'}
+        </div>
+        <div style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.3' }}>
+          {replyingTo.content.length > 80 
+            ? `${replyingTo.content.substring(0, 80)}...` 
+            : replyingTo.content
+          }
+        </div>
+      </div>
+      
+      <IconButton 
+        onClick={clearReply}
+        size="small"
+        sx={{ 
+          color: '#666',
+          '&:hover': {
+            backgroundColor: 'rgba(0,0,0,0.1)'
+          }
+        }}
+        title="Cancel Reply"
+      >
+        ×
+      </IconButton>
+    </div>
+    
+    <div style={{
+      display: 'flex',
+      gap: '8px',
+      alignItems: 'flex-end'
+    }}>
+      <TextField
+        fullWidth
+        size="small"
+        value={quickReplyMessage}
+        onChange={(e) => setQuickReplyMessage(e.target.value)}
+        placeholder="Type your reply..."
+        variant="outlined"
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            borderRadius: '20px',
+            backgroundColor: 'white',
+            fontSize: '14px',
+            '& fieldset': {
+              borderColor: '#ddd',
+            },
+            '&:hover fieldset': {
+              borderColor: '#4caf50',
+            },
+            '&.Mui-focused fieldset': {
+              borderColor: '#4caf50',
+            },
+          },
+          '& .MuiInputBase-input': {
+            padding: '8px 14px',
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleQuickReply();
+          }
+        }}
+        // ✅ Add typing handlers to the quick reply input
+        onFocus={handleTypingStart}
+        onBlur={handleTypingStop}
+      />
+      
+      <IconButton 
+        onClick={handleQuickReply}
+        disabled={!quickReplyMessage.trim()}
+        sx={{ 
+          backgroundColor: quickReplyMessage.trim() ? '#4caf50' : '#ccc',
+          color: 'white',
+          width: '36px',
+          height: '36px',
+          '&:hover': {
+            backgroundColor: quickReplyMessage.trim() ? '#45a049' : '#ccc',
+          },
+          '&:disabled': {
+            backgroundColor: '#ccc',
+            color: 'white',
+          },
+          transition: 'background-color 0.2s'
+        }}
+        title="Send Reply"
+      >
+        <Send fontSize="small" />
+      </IconButton>
+    </div>
+  </div>
+)}
 
       {/* Forward Context */}
       {forwarding && (
@@ -403,13 +688,15 @@ export default function ChatArea({
         </div>
       )}
 
+      {/* ✅ Enhanced ChatInput with group support */}
       <ChatInput
         currentUserId={currentUserId}
         senderId={senderId}
         receiverId={receiverId}
+        groupId={isGroupChat ? (contact.id || contact._id) : undefined}
         channelId={channelId}
         onMessageSent={handleMessageSend}
-        onTyping={handleTyping}
+        onTyping={handleTypingStart}
         replyingTo={replyingTo}
         forwarding={forwarding}
       />
@@ -430,6 +717,7 @@ export default function ChatArea({
         message={forwarding}
       />
 
+      {/* Status View */}
       {showStatusView && (
         <StatusView
           isDark={false}

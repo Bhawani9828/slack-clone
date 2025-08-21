@@ -46,6 +46,8 @@ interface MessageDropdownProps {
   onForward: (messageId: string) => void;
   onDelete: (messageId: string) => void;
   onInfo?: (messageId: string) => void;
+  isGroupChat: boolean; 
+  isCurrentUserAdmin?: boolean; 
 }
 
 export default function MessageDropdown({
@@ -60,6 +62,8 @@ export default function MessageDropdown({
   onForward,
   onDelete,
   onInfo,
+  isGroupChat,
+  isCurrentUserAdmin = false,
 }: MessageDropdownProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -166,25 +170,42 @@ export default function MessageDropdown({
     handleClose();
   }, [handleClose]);
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteType) return;
+const handleConfirmDelete = useCallback(async () => {
+  if (!deleteType) return;
 
-    try {
-      if (deleteType === 'soft') {
-        await deleteMessage(messageId);
-        showSuccessMessage("Message deleted for you!");
-      } else {
-        await hardDeleteMessage(messageId);
-        showSuccessMessage("Message permanently deleted for everyone!");
+  try {
+    if (deleteType === "soft") {
+      // Pass messageId as first arg, options as second arg
+     await deleteMessage(messageId, { isGroupChat, groupId: receiverId });
+      showSuccessMessage("Message deleted for you!");
+    } else {
+      if (isGroupChat && !isCurrentUserAdmin) {
+        showSuccessMessage("Only admins can delete for everyone in group chats!");
+        return;
       }
-      onDelete(messageId);
-    } catch (err) {
-      console.error("Delete failed:", err);
+     await hardDeleteMessage(messageId, { isGroupChat, groupId: receiverId });
+      showSuccessMessage("Message permanently deleted for everyone!");
     }
-    
-    setDeleteDialogOpen(false);
-    setDeleteType(null);
-  }, [deleteType, messageId, deleteMessage, hardDeleteMessage, onDelete, showSuccessMessage]);
+
+    onDelete(messageId);
+  } catch (err) {
+    console.error("Delete failed:", err);
+  }
+
+  setDeleteDialogOpen(false);
+  setDeleteType(null);
+}, [
+  deleteType,
+  messageId,
+  deleteMessage,
+  hardDeleteMessage,
+  onDelete,
+  showSuccessMessage,
+  isGroupChat,
+  isCurrentUserAdmin,
+  receiverId,
+]);
+
 
   const handleCancelDelete = useCallback(() => {
     setDeleteDialogOpen(false);

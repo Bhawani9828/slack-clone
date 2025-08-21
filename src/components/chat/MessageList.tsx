@@ -29,7 +29,6 @@ import { useSelector } from "react-redux"
 import type { RootState } from "@/lib/store"
 import MessageDropdown from "./MessageDropdown"
 
-
 interface Message {
   _id: string
   senderId: string | { _id: string; name?: string; username?: string; avatar?: string }
@@ -50,6 +49,32 @@ interface Message {
   isFavorite?: boolean
 }
 
+// ✅ Add GroupInfo interface
+interface GroupInfo {
+  _id: string;
+  id?: string;
+  name: string;
+  description?: string;
+  participants: Array<{
+    userId: string;
+    role: "admin" | "member";
+    joinedAt: string;
+  }>;
+  admins: string[];
+  groupImage?: string;
+  avatar?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: { 
+    content: string; 
+    senderId: string; 
+    createdAt: string; 
+  };
+  unreadCount?: number;
+}
+
+// ✅ Fixed MessageListProps interface
 interface MessageListProps {
   messages: Message[]
   currentUserId: string
@@ -57,32 +82,115 @@ interface MessageListProps {
   onReplyMessage?: (messageId: string) => void
   onForwardMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void 
+  onReply: (msg: Message) => void
+  // ✅ Add missing group chat props
+  isGroupChat?: boolean
+  groupInfo?: GroupInfo | null;
+  isCurrentUserAdmin?: boolean
 }
 
-export default function MessageList({ messages, currentUserId, formatTime, onReplyMessage, onForwardMessage  }: MessageListProps) {
+// ✅ Fixed function signature with proper destructuring
+export default function MessageList({ 
+  messages, 
+  currentUserId, 
+  formatTime, 
+  onReplyMessage, 
+  onForwardMessage, 
+  onDeleteMessage, // ✅ Added missing comma
+  onReply,
+  isGroupChat = false,
+  groupInfo,
+  isCurrentUserAdmin = false 
+}: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>(messages)
-
+const [deletedIds, setDeletedIds] = useState<string[]>([])
   const chatUsers = useSelector((state: RootState) => state.user.chatusers)
 
   const avatarMap = useMemo(() => {
-    return chatUsers.reduce(
+    const map = chatUsers.reduce(
       (acc, user) => {
         acc[user.id] = user.avatar
         return acc
       },
       {} as Record<string, string>,
     )
-  }, [chatUsers])
 
-  useEffect(() => {
-    const enriched = messages.map((msg) => ({
-      ...msg,
-      avatar: avatarMap[typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id] || "",
-    }))
-    setLocalMessages(enriched)
-  }, [messages, avatarMap])
+    // ✅ Add group participants to avatar map if it's a group chat
+    if (isGroupChat && groupInfo?.participants) {
+      groupInfo.participants.forEach(participant => {
+        if (!map[participant.userId]) {
+          // You might want to fetch participant details or use default
+          map[participant.userId] = '' // Default empty, will use fallback
+        }
+      })
+    }
+
+    return map
+  }, [chatUsers, isGroupChat, groupInfo])
+
+  // ✅ Helper function to get sender name for group chats
+  const getSenderName = useCallback((senderId: string | { _id: string; name?: string; username?: string }) => {
+    if (typeof senderId === 'string') {
+      if (isGroupChat && groupInfo?.participants) {
+        const participant = groupInfo.participants.find(p => p.userId === senderId)
+        // You might want to get the actual name from your user data
+        return senderId // For now, return the ID, but you could enhance this
+      }
+      return senderId
+    }
+    return senderId.name || senderId.username || senderId._id
+  }, [isGroupChat, groupInfo])
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    console.log(`Deleting message: ${messageId}`)
+
+    // Only allow admins to delete messages in group chats, or let users delete their own messages
+    if (isGroupChat) {
+      const message = localMessages.find(msg => msg._id === messageId)
+      const isSenderCurrentUser = typeof message?.senderId === 'string' 
+        ? message.senderId === currentUserId
+        : message?.senderId._id === currentUserId
+
+      if (!isCurrentUserAdmin && !isSenderCurrentUser) {
+        console.log('User not authorized to delete this message')
+        return
+      }
+    }
+
+    // Call the parent delete handler if provided
+    onDeleteMessage?.(messageId)
+
+    // Update local state
+    setLocalMessages(prev =>
+      prev.filter(msg => msg._id !== messageId)
+    )
+  }, [isGroupChat, isCurrentUserAdmin, currentUserId, localMessages, onDeleteMessage])
+  const handleDelete = (id: string) => {
+  setDeletedIds(prev => [...prev, id])
+}
+
+ useEffect(() => {
+  const enriched = messages.map((msg) => ({
+    ...msg,
+    avatar: avatarMap[
+      typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id
+    ] || "",
+  }))
+
+  const uniqueMessages = Array.from(
+    new Map(enriched.map((msg) => [msg._id, msg])).values()
+  )
+
+  // Exclude deleted messages
+  const filteredMessages = uniqueMessages.filter(
+    msg => !deletedIds.includes(msg._id)
+  )
+
+  setLocalMessages(filteredMessages)
+}, [messages, avatarMap, deletedIds])
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -290,53 +398,39 @@ export default function MessageList({ messages, currentUserId, formatTime, onRep
     return "U"
   }
 
-  
   const handleReplyMessage = useCallback((messageId: string) => {
     console.log(`Replying to message: ${messageId}`)
     onReplyMessage?.(messageId)
-   
   }, [onReplyMessage])
 
   const handleForwardMessage = useCallback((messageId: string) => {
     console.log(`Forwarding message: ${messageId}`)
     onForwardMessage?.(messageId)
-    // You can implement forward logic here or pass it up to parent
   }, [onForwardMessage])
 
-const handleDeleteMessage = useCallback((messageId: string) => {
-  console.log(`Deleting message: ${messageId}`);
-
- 
-  setLocalMessages(prev =>
-    prev.filter(msg => msg._id !== messageId)
-  );
-
-  
-}, []);
-
   return (
- <Box
-  sx={{
-    flex: 1,
-    overflowY: "auto",
-    px: 2,
-    py: 1,
-    "&::-webkit-scrollbar": { width: "6px" },
-    "&::-webkit-scrollbar-track": { background: "#f1f1f1" },
-    "&::-webkit-scrollbar-thumb": {
-      background: "#c1c1c1",
-      borderRadius: "3px",
-    },
-    "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
-    backgroundImage: `url(/2.jpg)`, 
-    backgroundRepeat: "repeat",
-    backgroundPosition: "top",
-    backgroundAttachment: "fixed", 
-    backgroundColor: "#e0f2f1",
-    margin: 0,
-    paddingTop: 0,
-  }}
->
+    <Box
+      sx={{
+        flex: 1,
+        overflowY: "auto",
+        px: 2,
+        py: 1,
+        "&::-webkit-scrollbar": { width: "6px" },
+        "&::-webkit-scrollbar-track": { background: "#f1f1f1" },
+        "&::-webkit-scrollbar-thumb": {
+          background: "#c1c1c1",
+          borderRadius: "3px",
+        },
+        "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
+        backgroundImage: `url(/2.jpg)`, 
+        backgroundRepeat: "repeat",
+        backgroundPosition: "top",
+        backgroundAttachment: "fixed", 
+        backgroundColor: "#e0f2f1",
+        margin: 0,
+        paddingTop: 0,
+      }}
+    >
       {localMessages
         ?.filter((msg) => !!msg && !!msg.senderId)
         .map((msg) => {
@@ -344,6 +438,7 @@ const handleDeleteMessage = useCallback((messageId: string) => {
             (typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id) === currentUserId
           const avatarSrc = msg.avatar || ""
           const avatarFallback = getAvatarFallback(msg.senderId)
+          const senderName = getSenderName(msg.senderId) // ✅ Get sender name
 
           return (
             <Box
@@ -375,7 +470,6 @@ const handleDeleteMessage = useCallback((messageId: string) => {
                 </Avatar>
               )}
 
-              {/* For sent messages, show avatar first */}
               {isSentByCurrentUser && (
                 <Avatar
                   sx={{
@@ -417,6 +511,22 @@ const handleDeleteMessage = useCallback((messageId: string) => {
                       },
                     }}
                   >
+                    {/* ✅ Show sender name in group chats for messages from others */}
+                    {isGroupChat && !isSentByCurrentUser && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "#01aa85",
+                          fontWeight: "bold",
+                          fontSize: "0.75rem",
+                          mb: 0.5,
+                          display: "block"
+                        }}
+                      >
+                        {senderName}
+                      </Typography>
+                    )}
+
                     {msg.type === "text" && (
                       <Typography
                         variant="body2"
@@ -457,19 +567,23 @@ const handleDeleteMessage = useCallback((messageId: string) => {
                   </CardContent>
                 </Card>
 
-                {/* Use the separate MessageDropdown component */}
-<MessageDropdown
-  messageId={msg._id}
-  messageContent={msg.content}
-  isSentByCurrentUser={isSentByCurrentUser}
-  senderId={typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id}
-  receiverId={msg.receiverId}
-  isFavorite={msg.isFavorite || false}
-  messageType={msg.type}
-  onReply={handleReplyMessage}
-  onForward={handleForwardMessage}
-  onDelete={handleDeleteMessage}
-/>
+                {/* ✅ Enhanced MessageDropdown with group chat context */}
+                <MessageDropdown
+                  messageId={msg._id}
+                  messageContent={msg.content}
+                  isSentByCurrentUser={isSentByCurrentUser}
+                  senderId={typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id}
+                  receiverId={msg.receiverId}
+                  isFavorite={msg.isFavorite || false}
+                  messageType={msg.type}
+                  onReply={handleReplyMessage}
+                  onForward={handleForwardMessage}
+                  onDelete={handleDeleteMessage}
+                  // ✅ Pass group chat context to dropdown
+                  isGroupChat={isGroupChat}
+                  isCurrentUserAdmin={isCurrentUserAdmin}
+                  
+                />
               </Box>
             </Box>
           )

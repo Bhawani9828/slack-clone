@@ -28,8 +28,82 @@ export interface Message {
   forwardedFrom?: string;
 }
 
-export interface ChatUser {
+// ✅ Add GroupMessage interface
+export interface GroupMessage {
+  _id: string;
+  senderId: string;
+  groupId: string;
+  content: string;
+  type: "text" | "image" | "video" | "file";
+  createdAt: string;
+  isSent: boolean;
+  isDelivered: boolean;
+  isRead: boolean;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: string;
+  replyTo?: string;
+  isForwarded?: boolean;
+  forwardedFrom?: string;
+}
+
+// ✅ Add GroupInfo interface
+export interface GroupInfo {
+  _id: string;
   id?: string;
+  name: string;
+  description?: string;
+  participants: Array<{
+    userId: string;
+    role: "admin" | "member";
+    joinedAt: string;
+  }>;
+  admins: string[];
+  groupImage?: string;
+    avatar?: string; 
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: { 
+    content: string; 
+    senderId: string; 
+    createdAt: string; 
+  };
+  unreadCount?: number;
+}
+
+
+// ✅ Add CreateGroupData interface
+export interface CreateGroupData {
+  name: string;
+  description?: string;
+  participants: string[];
+  groupImage?: string;
+}
+
+// ✅ Add UpdateGroupData interface
+export interface UpdateGroupData {
+  name?: string;
+  description?: string;
+  groupImage?: string;
+}
+
+// ✅ Add GroupStats interface
+export interface GroupStats {
+  totalMessages: number;
+  totalParticipants: number;
+  totalFiles: number;
+  totalImages: number;
+  messagesByType: Record<string, number>;
+  participantStats: Array<{
+    userId: string;
+    messageCount: number;
+    lastActivity: string;
+  }>;
+}
+
+export interface ChatUser {
+  id: string;
   _id?: string;
   name: string;
   username?: string;
@@ -47,8 +121,24 @@ export interface ChatUser {
   lastSeen?: string;
 }
 
+export interface ChatGroup {
+  id?: string;
+  _id?: string;
+  name: string;              
+  description?: string;      
+  avatar?: string;           
+  members?: ChatUser[];        
+  adminId?: string;          
+  createdAt?: string;
+  updatedAt?: string;
+  lastMessage?: string;      
+  time?: string; 
+  unreadCount?: number;             
+}
+
+// ✅ Updated ChatAreaProps with group support
 export interface ChatAreaProps {
-  contact: ChatUser;
+  contact: ChatUser | ChatGroup;
   channelId: string;
   receiverId: string;
   currentUserId: string;
@@ -56,6 +146,27 @@ export interface ChatAreaProps {
   currentUserName: string;
   onVideoCall?: () => void;
   onVoiceCall?: () => void;
+  
+  // ✅ Add these new group chat props
+  groupInfo?: GroupInfo | null;
+  isGroupChat?: boolean;
+  groupMessages?: GroupMessage[];
+  typingUsers?: string[];
+  onlineUsers?: string[];
+  onSendGroupMessage?: (content: string, type?: "text" | "image" | "video" | "file") => Promise<void>;
+  onGroupTyping?: () => void;
+  onGroupStopTyping?: () => void;
+  onDeleteGroupMessage?: (messageId: string) => Promise<void>;
+  onLoadMoreMessages?: () => Promise<void>;
+  isLoadingMessages?: boolean;
+  hasMoreMessages?: boolean;
+  isCurrentUserAdmin?: boolean;
+  canManageGroup?: boolean;
+  participantCount?: number;
+  onLeaveGroup?: () => Promise<boolean>;
+  onAddParticipants?: (participantIds: string[]) => Promise<boolean>;
+  onRemoveParticipant?: (participantId: string) => Promise<boolean>;
+  onChangeAdminStatus?: (userId: string, makeAdmin: boolean) => Promise<boolean>;
 }
 
 export interface UserProfile {

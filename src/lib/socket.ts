@@ -2,6 +2,11 @@
 import { io, Socket } from 'socket.io-client';
 import Cookies from 'js-cookie';
 
+export interface DeleteOptions {
+  isGroupChat?: boolean;
+  groupId?: string;
+}
+
 class SocketService {
   private socket: Socket | null = null;
   private currentChatId: string | null = null;
@@ -277,46 +282,51 @@ joinChannel(chatId: string) {
   
   // Message Action Methods (Socket-first with REST fallback)
 // Soft delete
-deleteMessage(messageId: string) {
-  return new Promise<void>((resolve, reject) => {
+// Soft delete
+deleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
+  return new Promise((resolve, reject) => {
     if (!this.socket?.connected) {
-      return reject('Socket not connected');
+      return reject(new Error("Socket not connected"));
     }
 
-    // Listen once for confirmation
     const onDeleted = (data: any) => {
       if (data?.messageId === messageId) {
-        this.socket?.off('messageDeleted', onDeleted); // cleanup listener
+        this.socket?.off("messageDeleted", onDeleted);
         resolve();
       }
     };
 
-    this.socket.on('messageDeleted', onDeleted);
+    this.socket.on("messageDeleted", onDeleted);
 
-    // Emit deleteMessage event (backend expects this)
-    this.socket.emit('deleteMessage', { messageId, hard: false });
+    this.socket.emit("deleteMessage", {
+      messageId,
+      hard: false,
+      ...options,
+    });
   });
 }
 
 // Hard delete
-hardDeleteMessage(messageId: string) {
-  return new Promise<void>((resolve, reject) => {
+hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
+  return new Promise((resolve, reject) => {
     if (!this.socket?.connected) {
-      return reject('Socket not connected');
+      return reject(new Error("Socket not connected"));
     }
 
-    // Listen once for confirmation
     const onDeleted = (data: any) => {
       if (data?.messageId === messageId) {
-        this.socket?.off('messageDeleted', onDeleted); // cleanup listener
+        this.socket?.off("messageDeleted", onDeleted);
         resolve();
       }
     };
 
-    this.socket.on('messageDeleted', onDeleted);
+    this.socket.on("messageDeleted", onDeleted);
 
-    // Emit deleteMessage with hard = true
-    this.socket.emit('deleteMessage', { messageId, hard: true });
+    this.socket.emit("deleteMessage", {
+      messageId,
+      hard: true,
+      ...options,
+    });
   });
 }
 
