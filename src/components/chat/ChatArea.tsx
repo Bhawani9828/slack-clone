@@ -47,6 +47,7 @@ export default function ChatArea({
   currentUserName,
   onVideoCall,
   onVoiceCall,
+  isDark = false,
   // ✅ Group chat props
   isGroupChat = false,
   groupMessages = [],
@@ -196,7 +197,13 @@ export default function ChatArea({
   if (isGroupChat && onSendGroupMessage) {
     // Handle group message
     try {
-      await onSendGroupMessage(msg.content, msg.type || "text");
+      await onSendGroupMessage({
+        content: msg.content,
+        type: msg.type || "text",
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        fileSize: msg.fileSize,
+      });
       
       // Clear reply/forward state after successful send
       if (replyingTo) {
@@ -720,7 +727,7 @@ const getSenderDisplayName = (senderId: string | { _id: string; name?: string; u
       {/* Status View */}
       {showStatusView && (
         <StatusView
-          isDark={false}
+          isDark={isDark}
           onBackToChat={() => {
             setShowStatusView(false);
             setStatusUserId(null);

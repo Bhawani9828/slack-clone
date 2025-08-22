@@ -56,6 +56,7 @@ export default function HomePage() {
   const [initialSelectedUserId, setInitialSelectedUserId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserName, setCurrentUserName] = useState<string>("");
+  const chatusers = useSelector((state: RootState) => state.user.chatusers);
 
   // Get current group ID for the hook
   const currentGroupId = selectedGroup?.id || "";
@@ -108,6 +109,32 @@ export default function HomePage() {
     }
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") {
+      setIsDark(saved === "dark");
+    } else if (typeof window !== "undefined" && window.matchMedia) {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setIsDark(prefersDark);
+      localStorage.setItem("theme", prefersDark ? "dark" : "light");
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDark((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("theme", next ? "dark" : "light");
+        if (next) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {}
+      return next;
+    });
+  };
+
   // ✅ Add debug useEffect to track state changes
   useEffect(() => {
     console.log("HomePage State Changes:", {
@@ -119,6 +146,66 @@ export default function HomePage() {
       isGroupConnected,
     });
   }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
+
+  // Auto-open the most recent/last-opened group when switching to group tab
+  useEffect(() => {
+    if (chatType !== "group" || selectedGroup) return;
+
+    // Try last opened group first
+    const lastId = localStorage.getItem("lastSelectedGroupId");
+    let target = lastId
+      ? groups.find((g: any) => g?._id === lastId || g?.id === lastId)
+      : undefined;
+
+    // Otherwise, pick the most recently active group
+    if (!target && groups && groups.length > 0) {
+      const sorted = [...groups].sort((a: any, b: any) => {
+        const ta = new Date(a?.lastMessage?.createdAt || a?.updatedAt || a?.createdAt || 0).getTime();
+        const tb = new Date(b?.lastMessage?.createdAt || b?.updatedAt || b?.createdAt || 0).getTime();
+        return tb - ta;
+      });
+      target = sorted[0];
+    }
+
+    if (target) {
+      const chatGroup: ChatGroup = {
+        id: (target as any)._id || (target as any).id,
+        _id: (target as any)._id || (target as any).id,
+        name: (target as any).name,
+        description: (target as any).description,
+        avatar: (target as any).groupImage || (target as any).avatar,
+        members: (target as any).participants || (target as any).members || [],
+      };
+      handleGroupSelect(chatGroup);
+    }
+  }, [chatType, groups, selectedGroup]);
+
+  // Auto-open the most recent/last-opened direct chat when switching to direct tab
+  useEffect(() => {
+    if (chatType !== "direct" || selectedUser) return;
+
+    const lastUserId = localStorage.getItem("lastSelectedUserId");
+
+    let userToOpen = lastUserId
+      ? chatusers.find((u: any) => u?.id === lastUserId)
+      : undefined;
+
+    if (!userToOpen && Array.isArray(chatusers) && chatusers.length > 0) {
+      const sorted = [...chatusers].sort((a: any, b: any) => {
+        const ta = new Date(a?.time || 0).getTime();
+        const tb = new Date(b?.time || 0).getTime();
+        return tb - ta;
+      });
+      userToOpen = sorted[0];
+    }
+
+    if (userToOpen) {
+      dispatch(setSelectedUser(userToOpen as any));
+      dispatch(setActiveView("chat"));
+      dispatch(setChatAreaActiveTab("chat"));
+      localStorage.setItem("lastSelectedUserId", userToOpen.id);
+    }
+  }, [chatType, selectedUser, chatusers, dispatch]);
 
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
@@ -168,13 +255,17 @@ const isValidObjectId = (id: string): boolean => {
 };
 
   // ✅ Group message handlers
-  const handleSendGroupMessage = async (content: string, type: "text" | "image" | "video" | "file" = "text") => {
-    if (!selectedGroup?.id || !content.trim()) return;
+  const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
+    if (!selectedGroup?.id || !msg.content.trim()) return;
 
     try {
       await sendGroupMessage({
-        content: content.trim(),
-        type,
+        content: msg.content.trim(),
+        type: msg.type || "text",
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        fileSize: msg.fileSize,
+        replyTo: msg.replyTo,
       });
     } catch (error) {
       console.error("Failed to send group message:", error);
@@ -306,7 +397,7 @@ const isValidObjectId = (id: string): boolean => {
   return (
     <>
       <div className={`relative flex h-screen ${bgColor}`}>
-        <LeftNavigation isDark={isDark} />
+        <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
         
         <div className={`flex flex-1 transition-all duration-300 ${isLeftNavOpen ? "ml-24" : "ml-0"}`}>
           <Sidebar
@@ -343,6 +434,7 @@ const isValidObjectId = (id: string): boolean => {
                           currentUserName={currentUserName}
                           onVideoCall={handleVideoCall}
                           onVoiceCall={handleVoiceCall}
+                          isDark={isDark}
                         />
                       )
                     ) : null}
@@ -376,6 +468,7 @@ const isValidObjectId = (id: string): boolean => {
                           currentUserName={currentUserName}
                           onVideoCall={handleVideoCall}
                           onVoiceCall={handleVoiceCall}
+                          isDark={isDark}
                           // ✅ Pass group-specific props
                           isGroupChat={true}
                           groupMessages={groupMessages}

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { TextField, IconButton } from "@mui/material";
+import EmojiPicker from "./EmojiPicker";
 import {
   Send,
   EmojiEmotions,
@@ -56,6 +57,35 @@ export default function ChatInput({
   const lastTypingSentRef = useRef<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
+  // ✅ Emoji picker state
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
+  const isEmojiOpen = Boolean(emojiAnchorEl);
+
+  const openEmojiPicker = (e: React.MouseEvent<HTMLElement>) => {
+    setEmojiAnchorEl(e.currentTarget);
+  };
+  const closeEmojiPicker = () => setEmojiAnchorEl(null);
+
+  const insertAtCaret = (textToInsert: string) => {
+    const el = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!el) {
+      setMessage((prev) => prev + textToInsert);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const newValue = (message || "").slice(0, start) + textToInsert + (message || "").slice(end);
+    setMessage(newValue);
+    // Restore caret after state update in next tick
+    requestAnimationFrame(() => {
+      try {
+        el.focus();
+        const caret = start + textToInsert.length;
+        el.setSelectionRange(caret, caret);
+      } catch {}
+    });
+  };
+
   // ✅ Track sent messages to prevent duplicates
   const sentMessagesRef = useRef<Set<string>>(new Set());
   // ✅ Reentrancy lock to prevent double-triggered sends (click + Enter, IME repeats)
@@ -460,8 +490,22 @@ export default function ChatInput({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
+      // Prevent key-repeat double send
+      const now = Date.now();
+      if (now - lastEnterTimestampRef.current < 300) {
+        e.preventDefault();
+        return;
+      }
+      lastEnterTimestampRef.current = now;
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
-    <div className="bg-[#fff] px-4 py-3">
+    <div className="chat-input px-4 py-3">
       <div className="flex items-end space-x-2">
         <input
           type="file"
@@ -474,9 +518,10 @@ export default function ChatInput({
         <div className="flex space-x-1">
           <IconButton 
             onClick={() => fileInputRef.current?.click()}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Attach file"
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
+            disabled={isUploading || isSending}
           >
             <AttachFile />
           </IconButton>
@@ -488,7 +533,8 @@ export default function ChatInput({
                 fileInputRef.current.click();
               }
             }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Send image"
             disabled={isUploading || isSending}
           >
@@ -502,7 +548,8 @@ export default function ChatInput({
                 fileInputRef.current.click();
               }
             }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Send video"
             disabled={isUploading || isSending}
           >
@@ -510,21 +557,28 @@ export default function ChatInput({
           </IconButton>
         </div>
 
-        <IconButton className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1">
+        <IconButton 
+          className="mb-1 transition-colors"
+          sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
+          onClick={openEmojiPicker}
+          disabled={isUploading || isSending}
+        >
           <EmojiEmotions />
         </IconButton>
 
         <div className="flex-1">
           <TextField
+            inputRef={inputRef as any}
             fullWidth
             multiline
             maxRows={4}
             placeholder={isGroupChat ? "Message to group..." : "Write your message..."}
             value={message}
             onChange={(e) => handleMessageChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             variant="outlined"
             size="small"
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
+            disabled={isUploading || isSending}
             className="bg-white rounded-full"
             sx={{
               "& .MuiOutlinedInput-root": {
@@ -534,19 +588,6 @@ export default function ChatInput({
                 "&:hover fieldset": { borderColor: "transparent" },
                 "&.Mui-focused fieldset": { borderColor: "transparent" },
               },
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
-                // Prevent key-repeat double send
-                const now = Date.now();
-                if (now - lastEnterTimestampRef.current < 300) {
-                  e.preventDefault();
-                  return;
-                }
-                lastEnterTimestampRef.current = now;
-                e.preventDefault();
-                handleSend();
-              }
             }}
           />
         </div>
@@ -569,15 +610,25 @@ export default function ChatInput({
       {/* Upload progress indicator */}
       {isUploading && (
         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-          <div 
-            className="bg-[#01aa85] h-2.5 rounded-full transition-all duration-300" 
+          <div
+            className="bg-[#01aa85] h-2.5 rounded-full transition-all duration-300"
             style={{ width: `${uploadProgress}%` }}
           ></div>
           <p className="text-sm text-gray-600 mt-1 text-center">
-            Uploading... {uploadProgress.toFixed(0)}%
+            {uploadProgress === 100 ? "Upload complete!" : `Uploading... ${uploadProgress.toFixed(0)}%`}
           </p>
         </div>
       )}
+
+      {/* Emoji Picker */}
+      <EmojiPicker
+        anchorEl={emojiAnchorEl}
+        open={isEmojiOpen}
+        onClose={closeEmojiPicker}
+        onSelect={(emoji) => {
+          insertAtCaret(emoji);
+        }}
+      />
 
       {/* ✅ Sending indicator */}
       {isSending && (
