@@ -151,7 +151,17 @@ export default function ChatHeader({
       }
       
       console.log('✅ Media stream obtained, initiating call...');
-      await callUser(contact.userId || '');
+      console.log('📹 Stream details:', {
+        id: stream.id,
+        tracks: stream.getTracks().map(track => ({
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState
+        }))
+      });
+      
+      // Pass the stream directly to callUser
+      await callUser(contact.userId || '', stream);
       setIsCallModalOpen(true);
     } catch (error: any) {
       console.error('Failed to initiate video call:', error);
@@ -177,7 +187,17 @@ export default function ChatHeader({
       }
       
       console.log('✅ Media stream obtained, initiating call...');
-      await callUser(contact.userId || '');
+      console.log('🎤 Stream details:', {
+        id: stream.id,
+        tracks: stream.getTracks().map(track => ({
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState
+        }))
+      });
+      
+      // Pass the stream directly to callUser
+      await callUser(contact.userId || '', stream);
       setIsCallModalOpen(true);
     } catch (error: any) {
       console.error('Failed to initiate voice call:', error);

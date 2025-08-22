@@ -35,7 +35,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   const socketRef = useRef<any>(null);
 
   // Initialize WebRTC peer connection
-  const createPeerConnection = useCallback(() => {
+  const createPeerConnection = useCallback((stream?: MediaStream) => {
     const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -46,20 +46,27 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     const pc = new RTCPeerConnection(configuration);
     
     // Add local stream tracks to peer connection
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        pc.addTrack(track, localStream);
+    const streamToUse = stream || localStream;
+    if (streamToUse) {
+      console.log('🔗 Adding tracks to peer connection:', streamToUse.getTracks().length);
+      streamToUse.getTracks().forEach(track => {
+        console.log('📡 Adding track:', { kind: track.kind, enabled: track.enabled });
+        pc.addTrack(track, streamToUse);
       });
+    } else {
+      console.warn('⚠️ No stream available for peer connection');
     }
 
     // Handle incoming remote stream
     pc.ontrack = (event) => {
+      console.log('📥 Remote track received:', event.track.kind);
       setRemoteStream(event.streams[0]);
     };
 
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('🧊 ICE candidate generated');
         socketRef.current?.emit('ice-candidate', {
           to: incomingCall?.from || '',
           candidate: event.candidate,
@@ -88,9 +95,18 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('✅ Media stream obtained successfully:', stream);
+      console.log('📹 Stream details:', {
+        id: stream.id,
+        tracks: stream.getTracks().map(track => ({
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState
+        }))
+      });
       
       // Set the stream in state
       setLocalStream(stream);
+      console.log('📹 Stream state updated');
       
       // Wait a bit to ensure state is updated
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -124,30 +140,21 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   }, []);
 
   // Call a user
-  const callUser = useCallback(async (userId: string) => {
+  const callUser = useCallback(async (userId: string, stream?: MediaStream) => {
     console.log('📞 callUser called with userId:', userId);
     console.log('📹 Current localStream:', localStream);
+    console.log('📹 Passed stream:', stream);
     
-    // Wait a bit for the stream to be set if it was just initialized
-    if (!localStream) {
-      console.log('⏳ Waiting for local stream to be available...');
-      // Wait up to 2 seconds for the stream to be available
-      for (let i = 0; i < 20; i++) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        if (localStream) {
-          console.log('✅ Local stream is now available');
-          break;
-        }
-      }
-      
-      if (!localStream) {
-        throw new Error('Local stream not initialized after waiting');
-      }
+    // Use the passed stream if available, otherwise use the state
+    const streamToUse = stream || localStream;
+    
+    if (!streamToUse) {
+      throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
     }
 
     setIsCalling(true);
     console.log('🔗 Creating peer connection...');
-    const pc = createPeerConnection();
+    const pc = createPeerConnection(streamToUse);
 
     try {
       console.log('📤 Creating offer...');
@@ -158,7 +165,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         to: userId,
         from: currentUserId,
         offer,
-        type: localStream.getVideoTracks().length > 0 ? 'video' : 'audio',
+        type: streamToUse.getVideoTracks().length > 0 ? 'video' : 'audio',
       };
       
       console.log('📡 Emitting call-user event:', callData);
