@@ -110,9 +110,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") setIsDark(true);
-    if (savedTheme === "light") setIsDark(false);
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") {
+      setIsDark(saved === "dark");
+    } else if (typeof window !== "undefined" && window.matchMedia) {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setIsDark(prefersDark);
+      localStorage.setItem("theme", prefersDark ? "dark" : "light");
+    }
   }, []);
 
   const toggleTheme = () => {
