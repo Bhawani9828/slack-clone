@@ -56,6 +56,7 @@ export default function HomePage() {
   const [initialSelectedUserId, setInitialSelectedUserId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserName, setCurrentUserName] = useState<string>("");
+  const chatusers = useSelector((state: RootState) => state.user.chatusers);
 
   // Get current group ID for the hook
   const currentGroupId = selectedGroup?.id || "";
@@ -158,12 +159,27 @@ export default function HomePage() {
     if (chatType !== "direct" || selectedUser) return;
 
     const lastUserId = localStorage.getItem("lastSelectedUserId");
-    // Ask Sidebar to open last user via initialSelectedUserId prop
-    if (lastUserId) {
+
+    let userToOpen = lastUserId
+      ? chatusers.find((u: any) => u?.id === lastUserId)
+      : undefined;
+
+    if (!userToOpen && Array.isArray(chatusers) && chatusers.length > 0) {
+      const sorted = [...chatusers].sort((a: any, b: any) => {
+        const ta = new Date(a?.time || 0).getTime();
+        const tb = new Date(b?.time || 0).getTime();
+        return tb - ta;
+      });
+      userToOpen = sorted[0];
+    }
+
+    if (userToOpen) {
+      dispatch(setSelectedUser(userToOpen as any));
       dispatch(setActiveView("chat"));
       dispatch(setChatAreaActiveTab("chat"));
+      localStorage.setItem("lastSelectedUserId", userToOpen.id);
     }
-  }, [chatType, selectedUser, dispatch]);
+  }, [chatType, selectedUser, chatusers, dispatch]);
 
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
