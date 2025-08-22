@@ -58,6 +58,10 @@ export default function ChatInput({
   
   // ✅ Track sent messages to prevent duplicates
   const sentMessagesRef = useRef<Set<string>>(new Set());
+  // ✅ Reentrancy lock to prevent double-triggered sends (click + Enter, IME repeats)
+  const sendLockRef = useRef<boolean>(false);
+  // ✅ Remember last key to avoid repeated Enter due to key repeat
+  const lastEnterTimestampRef = useRef<number>(0);
 
   const isGroupChat = !!groupId;
 
@@ -123,24 +127,38 @@ export default function ChatInput({
     };
   }, [receiverId, groupId, isGroupChat]);
 
+  // ✅ Build a stable client id for idempotency
+  const buildClientMessageId = (
+    content: string,
+    extra?: Record<string, string | undefined>
+  ) => {
+    const base = `${currentUserId}|${isGroupChat ? groupId : receiverId}|${channelId}|${content}`;
+    const extras = extra
+      ? Object.entries(extra)
+          .filter(([, v]) => !!v)
+          .map(([k, v]) => `${k}:${v}`)
+          .sort()
+          .join("|")
+      : "";
+    // Do NOT include Date.now() in key; stability prevents duplicates
+    return extras ? `${base}|${extras}` : base;
+  };
+
   // ✅ Fixed send handler - prevent duplicates
   const handleSend = async () => {
-    // ✅ Prevent multiple sends
-    if (isSending || !message.trim() || !currentUserId || (!receiverId && !groupId)) {
-      console.warn('❌ Invalid send attempt:', { 
-        isSending,
-        message: message.length, 
-        currentUserId, 
-        receiverId, 
-        groupId 
-      });
+    // Quick guard
+    if (!message.trim() || !currentUserId || (!receiverId && !groupId)) {
       return;
     }
 
+    // Reentrancy lock
+    if (sendLockRef.current || isSending) {
+      return;
+    }
+    sendLockRef.current = true;
+
     try {
-      // ✅ Set sending state to prevent double sends
       setIsSending(true);
-      console.log("🚀 Starting to send message...");
 
       // Clear typing indicator
       if (lastTypingSentRef.current) {
@@ -158,25 +176,27 @@ export default function ChatInput({
       const messageToSend = message.trim();
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // ✅ Check if we've already sent this exact message recently
-      const messageKey = `${messageToSend}-${Date.now()}`;
+      // ✅ Stable idempotency key (no Date.now())
+      const messageKey = buildClientMessageId(messageToSend, {
+        replyTo: replyingTo?._id,
+        forwardingFrom: forwarding?._id,
+        type: "text",
+      });
+
       if (sentMessagesRef.current.has(messageKey)) {
-        console.warn('❌ Duplicate message detected, ignoring');
+        console.warn("❌ Duplicate message detected, ignoring");
         return;
       }
-      
-      // ✅ Add to sent messages tracker
       sentMessagesRef.current.add(messageKey);
-      
-      // ✅ Clean up old entries (keep only last 10 messages)
-      if (sentMessagesRef.current.size > 10) {
+      // Keep only recent 50 keys
+      if (sentMessagesRef.current.size > 50) {
         const entries = Array.from(sentMessagesRef.current);
-        entries.slice(0, entries.length - 10).forEach(entry => {
+        entries.slice(0, entries.length - 50).forEach((entry) => {
           sentMessagesRef.current.delete(entry);
         });
       }
 
-      // ✅ Create optimistic message
+      // Optimistic message
       const optimisticMessage = {
         _id: tempId,
         senderId: currentUserId,
@@ -192,20 +212,19 @@ export default function ChatInput({
         fileName: "",
         fileSize: "",
         channelId: isGroupChat ? groupId! : channelId,
+        clientMessageId: messageKey,
         ...(replyingTo && {
           replyTo: replyingTo._id,
           replyToContent: replyingTo.content,
-          replyToSender: typeof replyingTo.senderId === 'string'
-            ? replyingTo.senderId
-            : replyingTo.senderId._id
+          replyToSender:
+            typeof replyingTo.senderId === "string"
+              ? replyingTo.senderId
+              : replyingTo.senderId._id,
         }),
-        ...(forwarding && { forwardingFrom: forwarding._id })
+        ...(forwarding && { forwardingFrom: forwarding._id }),
       };
 
-      // ✅ Show optimistic message immediately for better UX
       onMessageSent(optimisticMessage);
-      
-      // ✅ Clear input after showing optimistic message
       setMessage("");
 
       if (isGroupChat && groupId) {
@@ -214,8 +233,10 @@ export default function ChatInput({
           content: messageToSend,
           type: "text",
           replyTo: replyingTo?._id,
+          // clientMessageId is not in type, but server may ignore unknown fields
+          // @ts-ignore
+          clientMessageId: messageKey,
         });
-        console.log("✅ Group message sent successfully");
       } else if (receiverId) {
         if (socketService.isConnected()) {
           if (replyingTo) {
@@ -223,18 +244,23 @@ export default function ChatInput({
               originalMessageId: replyingTo._id,
               receiverId,
               content: messageToSend,
-              type: 'text',
+              type: "text",
               channelId,
               replyToContent: replyingTo.content,
-              replyToSender: typeof replyingTo.senderId === 'string' 
-                ? replyingTo.senderId 
-                : replyingTo.senderId._id
+              replyToSender:
+                typeof replyingTo.senderId === "string"
+                  ? replyingTo.senderId
+                  : replyingTo.senderId._id,
+              // @ts-ignore
+              clientMessageId: messageKey,
             };
             await socketService.replyToMessage(replyData);
           } else if (forwarding) {
             await socketService.forwardMessage({
               messageId: forwarding._id,
-              receiverIds: [receiverId]
+              receiverIds: [receiverId],
+              // @ts-ignore
+              clientMessageId: messageKey,
             });
           } else {
             await socketService.sendMessage({
@@ -244,10 +270,11 @@ export default function ChatInput({
               type: "text",
               channelId,
               createdAt: new Date().toISOString(),
+              // @ts-ignore
+              clientMessageId: messageKey,
             });
           }
         } else {
-          // ✅ API fallback
           await postApi(API_ENDPOINTS.MESSAGES_SEND, {
             senderId: currentUserId,
             receiverId,
@@ -257,22 +284,25 @@ export default function ChatInput({
             fileName: "",
             fileSize: "",
             channelId,
+            clientMessageId: messageKey,
           });
         }
-        console.log("✅ Direct message sent successfully");
       }
-
-      console.log("✅ Message send completed successfully");
-      
     } catch (error) {
       console.error("❌ Error sending message:", error);
-      // ✅ Remove from sent tracker on error
-      const messageKey = `${message.trim()}-${Date.now()}`;
-      sentMessagesRef.current.delete(messageKey);
+      // On error, allow retry by removing key
+      try {
+        const messageToSend = message.trim();
+        const messageKey = buildClientMessageId(messageToSend, {
+          replyTo: replyingTo?._id,
+          forwardingFrom: forwarding?._id,
+          type: "text",
+        });
+        sentMessagesRef.current.delete(messageKey);
+      } catch {}
     } finally {
-      // ✅ Always reset sending state
-      console.log("🔄 Resetting sending state...");
       setIsSending(false);
+      sendLockRef.current = false;
     }
   };
 
@@ -284,14 +314,18 @@ export default function ChatInput({
     fileName?: string;
     fileSize?: string | number;
   }) => {
-    const messageKey = `file-${messageData.fileUrl}-${Date.now()}`;
+    // Stable key by url+name+size+type
+    const messageKey = buildClientMessageId(messageData.content || messageData.fileUrl || "", {
+      type: messageData.type,
+      fileUrl: messageData.fileUrl,
+      fileName: messageData.fileName,
+      fileSize: messageData.fileSize?.toString(),
+    });
     
-    // ✅ Prevent duplicate file sends
     if (sentMessagesRef.current.has(messageKey)) {
       console.warn('❌ Duplicate file message detected, ignoring');
       return;
     }
-    
     sentMessagesRef.current.add(messageKey);
 
     try {
@@ -304,6 +338,8 @@ export default function ChatInput({
             fileUrl: messageData.fileUrl,
             fileName: messageData.fileName,
             fileSize: messageData.fileSize?.toString(),
+            // @ts-ignore
+            clientMessageId: messageKey,
           });
         }
       } else if (receiverId) {
@@ -318,6 +354,8 @@ export default function ChatInput({
             fileSize: messageData.fileSize?.toString() || '',
             channelId,
             createdAt: new Date().toISOString(),
+            // @ts-ignore
+            clientMessageId: messageKey,
           };
 
           console.log("📤 Sending file message via socket:", socketPayload);
@@ -332,6 +370,7 @@ export default function ChatInput({
             fileName: messageData.fileName || '',
             fileSize: messageData.fileSize?.toString() || '',
             channelId,
+            clientMessageId: messageKey,
           };
 
           await postApi(API_ENDPOINTS.MESSAGES_SEND, payload);
@@ -339,7 +378,6 @@ export default function ChatInput({
       }
     } catch (error) {
       console.error('Error sending file message:', error);
-      // ✅ Remove from tracker on error
       sentMessagesRef.current.delete(messageKey);
       throw error;
     }
@@ -499,6 +537,13 @@ export default function ChatInput({
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
+                // Prevent key-repeat double send
+                const now = Date.now();
+                if (now - lastEnterTimestampRef.current < 300) {
+                  e.preventDefault();
+                  return;
+                }
+                lastEnterTimestampRef.current = now;
                 e.preventDefault();
                 handleSend();
               }
