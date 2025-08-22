@@ -109,6 +109,20 @@ export default function HomePage() {
     }
   }, []);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") setIsDark(true);
+    if (savedTheme === "light") setIsDark(false);
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDark((prev) => {
+      const next = !prev;
+      localStorage.setItem("theme", next ? "dark" : "light");
+      return next;
+    });
+  };
+
   // ✅ Add debug useEffect to track state changes
   useEffect(() => {
     console.log("HomePage State Changes:", {
@@ -371,7 +385,7 @@ const isValidObjectId = (id: string): boolean => {
   return (
     <>
       <div className={`relative flex h-screen ${bgColor}`}>
-        <LeftNavigation isDark={isDark} />
+        <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
         
         <div className={`flex flex-1 transition-all duration-300 ${isLeftNavOpen ? "ml-24" : "ml-0"}`}>
           <Sidebar
