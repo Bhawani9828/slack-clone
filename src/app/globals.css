@@ -51,6 +51,10 @@ body {
 .bubble-out { background-color: var(--bubble-out) !important; color: #fff !important; }
 .bubble-in { background-color: var(--bubble-in) !important; color: var(--text-primary) !important; }
 
+/* Media overlay background for image/video action buttons */
+:root { --media-overlay-bg: rgba(0,0,0,0.5); }
+.dark { --media-overlay-bg: rgba(0,0,0,0.7); }
+
 @theme inline {
   --color-background: var(--bg-app);
   --color-foreground: var(--text-primary);

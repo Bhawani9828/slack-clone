@@ -305,9 +305,9 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
                 position: "absolute",
                 bottom: 8,
                 right: 8,
-                backgroundColor: "rgba(0,0,0,0.5)",
+                backgroundColor: "var(--media-overlay-bg)",
                 color: "white",
-                "&:hover": { backgroundColor: "rgba(0,0,0,0.7)" },
+                "&:hover": { backgroundColor: "var(--media-overlay-bg)" },
               }}
               onClick={(e) => {
                 e.stopPropagation()
@@ -338,9 +338,9 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
                 position: "absolute",
                 bottom: 8,
                 right: 8,
-                backgroundColor: "rgba(0,0,0,0.5)",
+                backgroundColor: "var(--media-overlay-bg)",
                 color: "white",
-                "&:hover": { backgroundColor: "rgba(0,0,0,0.7)" },
+                "&:hover": { backgroundColor: "var(--media-overlay-bg)" },
               }}
               onClick={(e) => {
                 e.stopPropagation()
