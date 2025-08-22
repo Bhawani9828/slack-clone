@@ -427,6 +427,7 @@ const isValidObjectId = (id: string): boolean => {
                           currentUserName={currentUserName}
                           onVideoCall={handleVideoCall}
                           onVoiceCall={handleVoiceCall}
+                          isDark={isDark}
                         />
                       )
                     ) : null}
@@ -460,6 +461,7 @@ const isValidObjectId = (id: string): boolean => {
                           currentUserName={currentUserName}
                           onVideoCall={handleVideoCall}
                           onVoiceCall={handleVoiceCall}
+                          isDark={isDark}
                           // ✅ Pass group-specific props
                           isGroupChat={true}
                           groupMessages={groupMessages}

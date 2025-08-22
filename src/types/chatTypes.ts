@@ -146,6 +146,7 @@ export interface ChatAreaProps {
   currentUserName: string;
   onVideoCall?: () => void;
   onVoiceCall?: () => void;
+  isDark?: boolean;
   
   // ✅ Add these new group chat props
   groupInfo?: GroupInfo | null;

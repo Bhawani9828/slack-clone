@@ -47,6 +47,7 @@ export default function ChatArea({
   currentUserName,
   onVideoCall,
   onVoiceCall,
+  isDark = false,
   // ✅ Group chat props
   isGroupChat = false,
   groupMessages = [],
@@ -726,7 +727,7 @@ const getSenderDisplayName = (senderId: string | { _id: string; name?: string; u
       {/* Status View */}
       {showStatusView && (
         <StatusView
-          isDark={false}
+          isDark={isDark}
           onBackToChat={() => {
             setShowStatusView(false);
             setStatusUserId(null);
