@@ -34,6 +34,7 @@ interface CallModalProps {
   remoteStream: MediaStream | null;
   isIncoming: boolean;
   isInCall: boolean;
+  isCalling?: boolean; // Add this prop
   onAccept: () => void;
   onReject: () => void;
   onEndCall: () => void;
@@ -206,43 +207,65 @@ export default function CallModal({
               {callerName}
             </Typography>
             <Typography variant="body2" sx={{ color: '#ccc' }}>
-              {isIncoming ? 'Incoming call' : 'Calling...'}
+              {isIncoming ? 'Incoming call' : isCalling ? 'Calling...' : 'Connected'}
             </Typography>
           </Box>
 
-          {/* Call Action Buttons */}
-          {isIncoming && !isInCall ? (
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <IconButton
-                onClick={handleAccept}
-                sx={{
-                  backgroundColor: '#00a884',
-                  color: 'white',
-                  width: 56,
-                  height: 56,
-                  '&:hover': {
-                    backgroundColor: '#008f6f',
-                  },
-                }}
-              >
-                <Call />
-              </IconButton>
-              <IconButton
-                onClick={handleReject}
-                sx={{
-                  backgroundColor: '#dc2626',
-                  color: 'white',
-                  width: 56,
-                  height: 56,
-                  '&:hover': {
-                    backgroundColor: '#b91c1c',
-                  },
-                }}
-              >
-                <CallEnd />
-              </IconButton>
-            </Box>
-          ) : (
+                  {/* Call Action Buttons */}
+        {isIncoming && !isInCall ? (
+          // Incoming call - show accept/reject buttons
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <IconButton
+              onClick={handleAccept}
+              sx={{
+                backgroundColor: '#00a884',
+                color: 'white',
+                width: 56,
+                height: 56,
+                '&:hover': {
+                  backgroundColor: '#008f6f',
+                },
+              }}
+            >
+              <Call />
+            </IconButton>
+            <IconButton
+              onClick={handleReject}
+              sx={{
+                backgroundColor: '#dc2626',
+                color: 'white',
+                width: 56,
+                height: 56,
+                '&:hover': {
+                  backgroundColor: '#b91c1c',
+                },
+              }}
+            >
+              <CallEnd />
+            </IconButton>
+          </Box>
+        ) : isCalling ? (
+          // Outgoing call - show calling status and cancel button
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Typography variant="body1" sx={{ color: '#ccc', alignSelf: 'center' }}>
+              Calling...
+            </Typography>
+            <IconButton
+              onClick={onEndCall}
+              sx={{
+                backgroundColor: '#dc2626',
+                color: 'white',
+                width: 48,
+                height: 48,
+                '&:hover': {
+                  backgroundColor: '#b91c1c',
+                },
+              }}
+            >
+              <CallEnd />
+            </IconButton>
+          </Box>
+        ) : (
             <Box sx={{ display: 'flex', gap: 2 }}>
               {/* Mic Toggle */}
               <IconButton

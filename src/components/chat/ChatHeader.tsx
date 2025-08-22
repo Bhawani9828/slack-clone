@@ -162,7 +162,9 @@ export default function ChatHeader({
       
       // Pass the stream directly to callUser
       await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
+      
+      // Don't open modal immediately - wait for call state
+      console.log('📞 Call initiated, waiting for response...');
     } catch (error: any) {
       console.error('Failed to initiate video call:', error);
       
@@ -259,12 +261,16 @@ export default function ChatHeader({
     // You can implement speaker toggle logic here
   };
 
-  // Show call modal when there's an incoming call or when in a call
+  // Show call modal when there's an incoming call, when in a call, or when calling
   useEffect(() => {
-    if (incomingCall || isInCall) {
+    if (incomingCall || isInCall || isCalling) {
+      console.log('📱 Opening call modal:', { incomingCall, isInCall, isCalling });
       setIsCallModalOpen(true);
+    } else {
+      console.log('📱 Closing call modal');
+      setIsCallModalOpen(false);
     }
-  }, [incomingCall, isInCall]);
+  }, [incomingCall, isInCall, isCalling]);
 
   return (
     <div className="bg-[#e3f7f3] px-4 py-3 border-b border-gray-200 flex items-center justify-between h-28">
@@ -380,6 +386,7 @@ export default function ChatHeader({
         remoteStream={remoteStream}
         isIncoming={!!incomingCall}
         isInCall={isInCall}
+        isCalling={isCalling}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
         onEndCall={handleEndCall}
