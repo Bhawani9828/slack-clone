@@ -10,6 +10,8 @@
   --border-color: #e5e7eb;
   --bubble-out: #01aa85;
   --bubble-in: #ffffff;
+  --accent: #01aa85;
+  --overlay-hover: rgba(0,0,0,0.06);
 }
 
 .dark {
@@ -21,6 +23,8 @@
   --border-color: #222c33;
   --bubble-out: #075e54;
   --bubble-in: #1f2c33;
+  --accent: #01aa85;
+  --overlay-hover: rgba(255,255,255,0.08);
 }
 
 body {

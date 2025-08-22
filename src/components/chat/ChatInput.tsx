@@ -518,9 +518,10 @@ export default function ChatInput({
         <div className="flex space-x-1">
           <IconButton 
             onClick={() => fileInputRef.current?.click()}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Attach file"
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
+            disabled={isUploading || isSending}
           >
             <AttachFile />
           </IconButton>
@@ -532,7 +533,8 @@ export default function ChatInput({
                 fileInputRef.current.click();
               }
             }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Send image"
             disabled={isUploading || isSending}
           >
@@ -546,7 +548,8 @@ export default function ChatInput({
                 fileInputRef.current.click();
               }
             }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+            className="mb-1 transition-colors"
+            sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
             title="Send video"
             disabled={isUploading || isSending}
           >
@@ -555,7 +558,8 @@ export default function ChatInput({
         </div>
 
         <IconButton 
-          className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#008f6e] mb-1"
+          className="mb-1 transition-colors"
+          sx={{ color: 'var(--accent)', backgroundColor: 'var(--overlay-hover)' }}
           onClick={openEmojiPicker}
           disabled={isUploading || isSending}
         >

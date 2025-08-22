@@ -118,7 +118,7 @@ export default function ChatHeader({
   };
 
   return (
-    <div className="chat-header px-4 py-3 flex items-center justify-between h-28">
+    <div className="chat-header px-4 py-3 flex items-center justify-between h-28 transition-colors">
       {/* Left - Contact Info */}
       <div className="flex items-center space-x-3">
       {contact.userId && (
@@ -139,34 +139,34 @@ export default function ChatHeader({
       </div>
 
       {/* Right - Icons */}
-      <div className="flex items-center space-x-2 !text-[#00a884]">
+      <div className="flex items-center space-x-2" style={{ color: "var(--accent)" }}>
         <Tooltip title="Audio" placement="bottom" arrow>
-          <IconButton className="hover:bg-[#00a8841a]">
-            <VolumeUp className="!text-[#00a884]" />
+          <IconButton className="transition-colors" sx={{ '&:hover': { backgroundColor: 'var(--overlay-hover)' } }}>
+            <VolumeUp sx={{ color: 'var(--accent)' }} />
           </IconButton>
         </Tooltip>
 
         <VerticalDivider />
 
         <Tooltip title="Search" placement="bottom" arrow>
-          <IconButton className="hover:bg-[#00a8841a]">
-            <Search className="!text-[#00a884]"/>
+          <IconButton className="transition-colors" sx={{ '&:hover': { backgroundColor: 'var(--overlay-hover)' } }}>
+            <Search sx={{ color: 'var(--accent)' }} />
           </IconButton>
         </Tooltip>
 
         <VerticalDivider />
 
         <Tooltip title="Video Call" placement="bottom" arrow>
-          <IconButton onClick={onVideoCall} className="hover:bg-[#00a8841a] text-red-600">
-            <VideoCall className="!text-[#00a884]" />
+          <IconButton onClick={onVideoCall} className="transition-colors" sx={{ '&:hover': { backgroundColor: 'var(--overlay-hover)' } }}>
+            <VideoCall sx={{ color: 'var(--accent)' }} />
           </IconButton>
         </Tooltip>
 
         <VerticalDivider />
 
         <Tooltip title="Voice Call" placement="bottom" arrow>
-          <IconButton onClick={onVoiceCall} className="hover:bg-[#00a8841a]">
-            <Call className="!text-[#00a884]"/>
+          <IconButton onClick={onVoiceCall} className="transition-colors" sx={{ '&:hover': { backgroundColor: 'var(--overlay-hover)' } }}>
+            <Call sx={{ color: 'var(--accent)' }} />
           </IconButton>
         </Tooltip>
 
@@ -175,9 +175,10 @@ export default function ChatHeader({
         <Tooltip title="More Options" placement="bottom" arrow>
           <IconButton
             onClick={handleMenuClick}
-            className="hover:bg-[#00a8841a] !bg-white !p-3"
+            className="transition-colors !p-3"
+            sx={{ backgroundColor: 'var(--bg-surface)', '&:hover': { backgroundColor: 'var(--overlay-hover)' } }}
           >
-            <MoreVert className="!text-[#00a884]"/>
+            <MoreVert sx={{ color: 'var(--accent)' }} />
           </IconButton>
         </Tooltip>
 
