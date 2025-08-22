@@ -735,6 +735,22 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
     this.socket?.off('call-ended');
     this.socket?.on('call-ended', callback);
   }
+
+  // Additional call event listeners
+  onCallOffer(callback: (data: any) => void) {
+    this.socket?.off('call-offer');
+    this.socket?.on('call-offer', callback);
+  }
+
+  onCallAnswer(callback: (data: any) => void) {
+    this.socket?.off('call-answer');
+    this.socket?.on('call-answer', callback);
+  }
+
+  onIceCandidate(callback: (data: any) => void) {
+    this.socket?.off('ice-candidate');
+    this.socket?.on('ice-candidate', callback);
+  }
 }
 
 export const socketService = new SocketService();
