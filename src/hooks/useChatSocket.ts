@@ -27,6 +27,7 @@ export const useChatSocket = (
     onlineUsers?: (userIds: string[]) => void;
     typing?: (data: any) => void;
   }>({});
+  const seenMessageKeysRef = useRef<Set<string>>(new Set());
 
   
 
@@ -135,6 +136,19 @@ export const useChatSocket = (
       return;
      }
 
+      // Build a stable key to dedupe: prefer backend _id or clientMessageId
+      const key: string = msg._id || msg.clientMessageId || `${msg.senderId}|${msg.receiverId}|${msg.createdAt}|${msg.content}`;
+      if (seenMessageKeysRef.current.has(key)) {
+        console.log('🧹 Duplicate inbound message suppressed:', key);
+        return;
+      }
+      seenMessageKeysRef.current.add(key);
+      // Trim set to last 500 entries
+      if (seenMessageKeysRef.current.size > 500) {
+        const first = seenMessageKeysRef.current.values().next().value;
+        seenMessageKeysRef.current.delete(first);
+      }
+
       console.log('✅ Processing RELEVANT message INSTANTLY:', msg.content);
 
       // Process message IMMEDIATELY - no setTimeout
@@ -151,18 +165,13 @@ export const useChatSocket = (
         fileUrl: msg.fileUrl || '',
         fileName: msg.fileName || '',
         fileSize: msg.fileSize || '',
-        channelId: msg.channelId || channelId
+        channelId: msg.channelId || channelId,
+        clientMessageId: msg.clientMessageId,
       };
 
       // IMMEDIATELY dispatch to Redux store
       dispatch(addMessage(newMessage));
       console.log('📨 Message added to store instantly!');
-
-   
-      
-    
-        
-    
 
       // Auto-mark as read if I'm the receiver
       if (msg.receiverId === currentUserId && msg._id) {

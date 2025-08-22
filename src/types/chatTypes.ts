@@ -26,6 +26,7 @@ export interface Message {
   replyTo?: string;
   isForwarded?: boolean;
   forwardedFrom?: string;
+  clientMessageId?: string;
 }
 
 // ✅ Add GroupMessage interface
@@ -217,6 +218,7 @@ export interface ApiMessage extends BaseMessage {
     replyTo?: string;
   isForwarded?: boolean;
   forwardedFrom?: string;
+  clientMessageId?: string;
 } 
 
 

@@ -109,8 +109,18 @@ export const optimizedChatSlice = createSlice({
 
     // Message management
     setMessages: (state, action: PayloadAction<Message[]>) => {
+      // Ensure unique by _id or clientMessageId across reloads
+      const seen = new Set<string>();
+      const unique: Message[] = [];
+      for (const msg of action.payload) {
+        const key = msg._id || msg.clientMessageId || `${msg.senderId}|${msg.receiverId}|${msg.createdAt}|${msg.content}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(msg);
+        }
+      }
       // Sort messages by timestamp to ensure correct order
-      state.messages = action.payload.sort((a, b) => 
+      state.messages = unique.sort((a, b) => 
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     },
@@ -118,15 +128,10 @@ export const optimizedChatSlice = createSlice({
     addMessage: (state, action: PayloadAction<Message>) => {
       const message = action.payload;
       
-      // Prevent duplicates - check by _id or content+timestamp
+      // Prevent duplicates - prefer _id and clientMessageId
       const isDuplicate = state.messages.some(existingMsg => 
-        existingMsg._id === message._id ||
-        (
-          existingMsg.content === message.content &&
-          existingMsg.senderId === message.senderId &&
-          existingMsg.receiverId === message.receiverId &&
-          Math.abs(new Date(existingMsg.createdAt).getTime() - new Date(message.createdAt).getTime()) < 1000
-        )
+        (message._id && existingMsg._id === message._id) ||
+        (message.clientMessageId && existingMsg.clientMessageId === message.clientMessageId)
       );
 
       if (!isDuplicate) {
@@ -287,7 +292,7 @@ setCurrentChat: (
   }
 },
 
- clearCurrentChat: (state) => {
+  clearCurrentChat: (state) => {
       state.currentChat = {
         channelId: null,
         receiverId: null,
@@ -398,15 +403,13 @@ export const {
   updateMessageStatus,
   clearMessages,
   bulkUpdateMessages,
-  filterMessagesForConversation,
-  updateLastMessage,
   
   // Online status
   setOnlineUsers,
   userOnline,
   userOffline,
   
-  // Typing
+  // Typing indicators
   setTypingStatus,
   clearTypingStatus,
   clearAllTyping,
@@ -420,45 +423,23 @@ export const {
   setCurrentChat,
   clearCurrentChat,
   
-  // UI state
+  // Loading & error
   setLoading,
   setError,
   clearError,
   
-  // Utilities
+  // Reset
   resetChatState,
+  
+  // Bulk updates
+  bulkUpdateMessages,
+  
+  // Filtering
+  filterMessagesForConversation,
+  
+  // Chat list
+  updateLastMessage,
   sortChatUsersByActivity,
 } = optimizedChatSlice.actions;
-
-// Selectors for better performance
-export const selectMessages = (state: { optimizedChat: ChatState }) => state.optimizedChat.messages;
-export const selectChatUsers = (state: { optimizedChat: ChatState }) => state.optimizedChat.chatUsers;
-export const selectCurrentUser = (state: { optimizedChat: ChatState }) => state.optimizedChat.currentUser;
-export const selectSelectedUser = (state: { optimizedChat: ChatState }) => state.optimizedChat.selectedUser;
-export const selectIsConnected = (state: { optimizedChat: ChatState }) => state.optimizedChat.isConnected;
-export const selectOnlineUsers = (state: { optimizedChat: ChatState }) => state.optimizedChat.onlineUsers;
-export const selectTypingUsers = (state: { optimizedChat: ChatState }) => state.optimizedChat.typingUsers;
-export const selectUnreadCounts = (state: { optimizedChat: ChatState }) => state.optimizedChat.unreadCounts;
-export const selectCurrentChat = (state: { optimizedChat: ChatState }) => state.optimizedChat.currentChat;
-
-// Computed selectors
-export const selectConversationMessages = (userId1: string, userId2: string) => 
-  (state: { optimizedChat: ChatState }) =>
-    state.optimizedChat.messages.filter(message =>
-      (message.senderId === userId1 && message.receiverId === userId2) ||
-      (message.senderId === userId2 && message.receiverId === userId1)
-    ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-export const selectUnreadCount = (userId: string) =>
-  (state: { optimizedChat: ChatState }) =>
-    state.optimizedChat.unreadCounts[userId] || 0;
-
-export const selectIsUserOnline = (userId: string) =>
-  (state: { optimizedChat: ChatState }) =>
-    state.optimizedChat.onlineUsers.includes(userId);
-
-export const selectIsUserTyping = (userId: string) =>
-  (state: { optimizedChat: ChatState }) =>
-    state.optimizedChat.typingUsers[userId] || false;
 
 export default optimizedChatSlice.reducer;

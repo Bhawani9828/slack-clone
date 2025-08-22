@@ -168,7 +168,8 @@ export default function ChatArea({
           isError: false,
           replyTo: msg.replyTo,
           isForwarded: msg.isForwarded,
-          forwardedFrom: msg.forwardedFrom
+          forwardedFrom: msg.forwardedFrom,
+          clientMessageId: (msg as any).clientMessageId,
         }));
 
         dispatch(setMessages(formattedMessages));
@@ -189,38 +190,18 @@ export default function ChatArea({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ Enhanced message send handler for both direct and group chats
+  // ✅ Optimistic message handler: only add to store, do NOT send (ChatInput sends)
  const handleMessageSend = async (msg: any) => {
   if (!msg?.content) return;
 
-  if (isGroupChat && onSendGroupMessage) {
-    // Handle group message
-    try {
-      await onSendGroupMessage(msg.content, msg.type || "text");
-      
-      // Clear reply/forward state after successful send
-      if (replyingTo) {
-        setReplyingTo(null);
-        setReplyingToMessageId(null);
-      }
-      if (forwarding) {
-        setForwarding(null);
-        setForwardingMessageId(null);
-      }
-    } catch (error) {
-      console.error("Failed to send group message:", error);
-    }
-    return;
-  }
-
-  // Handle direct message (existing logic with fix)
-  const newMessage: Message = {
-    _id: `temp-${Date.now()}`,
-    senderId: currentUserId,
-    receiverId,
+  // Normalize incoming optimistic message
+  const optimistic: Message = {
+    _id: msg._id || `temp-${Date.now()}`,
+    senderId: msg.senderId || currentUserId,
+    receiverId: isGroupChat ? (msg.groupId || (contact.id || (contact as any)._id)) : receiverId,
     content: msg.content,
     type: msg.type || "text",
-    createdAt: new Date().toISOString(),
+    createdAt: msg.createdAt || new Date().toISOString(),
     isSent: true,
     isDelivered: false,
     isRead: false,
@@ -229,59 +210,22 @@ export default function ChatArea({
     fileName: msg.fileName || "",
     fileSize: msg.fileSize || "",
     channelId: msg.channelId || channelId,
-    ...(replyingTo && { 
-      replyTo: replyingTo._id,
-      replyToContent: replyingTo.content,
-      // ✅ Fixed: Use helper function to get sender ID as string
-      replyToSender: getSenderId(replyingTo.senderId)
-    }),
-    ...(forwarding && { 
-      isForwarded: true,
-      forwardedFrom: forwarding._id,
-    })
+    replyTo: msg.replyTo,
+    isForwarded: msg.isForwarded,
+    forwardedFrom: msg.forwardedFrom,
+    clientMessageId: msg.clientMessageId,
   };
 
-  dispatch(addMessage(newMessage));
+  dispatch(addMessage(optimistic));
 
-  try {
-    if (isConnected) {
-      if (replyingTo) {
-        const replyData = {
-          originalMessageId: replyingTo._id,
-          receiverId,
-          content: msg.content,
-          type: msg.type || 'text',
-          channelId,
-          replyToContent: replyingTo.content,
-          // ✅ Fixed: Use helper function to get sender ID as string
-          replyToSender: getSenderId(replyingTo.senderId)
-        };
-        
-        await socketService.replyToMessage(replyData);
-      } else if (forwarding) {
-        await socketService.forwardMessage({
-          messageId: forwarding._id,
-          receiverIds: [receiverId]
-        });
-      } else {
-        await socketService.sendMessage(newMessage);
-      }
-      
-      if (replyingTo) {
-        setReplyingTo(null);
-        setReplyingToMessageId(null);
-      }
-      if (forwarding) {
-        setForwarding(null);
-        setForwardingMessageId(null);
-      }
-    }
-  } catch (error) {
-    console.error("Send failed:", error);
-    dispatch(updateMessageStatus({ 
-      messageId: newMessage._id,
-      status: 'error' 
-    }));
+  // Clear reply/forward state after optimistic add
+  if (replyingTo) {
+    setReplyingTo(null);
+    setReplyingToMessageId(null);
+  }
+  if (forwarding) {
+    setForwarding(null);
+    setForwardingMessageId(null);
   }
 };
 
