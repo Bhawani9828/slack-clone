@@ -74,12 +74,46 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   // Initialize local media stream
   const initLocalStream = useCallback(async (constraints: MediaStreamConstraints) => {
     try {
+      console.log('🎥 Requesting media permissions with constraints:', constraints);
+      
+      // Check if MediaDevices API is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('MediaDevices API is not supported in this browser');
+      }
+
+      // Check if we're in a secure context
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        throw new Error('MediaDevices API requires HTTPS or localhost for security reasons');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('✅ Media stream obtained successfully:', stream);
+      
       setLocalStream(stream);
       return stream;
-    } catch (error) {
-      console.error('Error accessing media devices:', error);
-      throw error;
+    } catch (error: any) {
+      console.error('❌ Error accessing media devices:', error);
+      
+      // Provide specific error messages
+      let errorMessage = 'Failed to access media devices';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Camera/microphone permission denied. Please allow access in your browser settings.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No camera or microphone found. Please connect the required devices.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = 'Camera/microphone not supported in this browser.';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = 'Camera/microphone is already in use by another application.';
+      } else if (error.name === 'OverconstrainedError') {
+        errorMessage = 'Camera/microphone constraints not satisfied.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      const enhancedError = new Error(errorMessage);
+      enhancedError.name = error.name;
+      throw enhancedError;
     }
   }, []);
 
