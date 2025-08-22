@@ -4,9 +4,11 @@ import { useSelector, useDispatch } from 'react-redux';
 import ChatArea from "@/components/chat/ChatArea";
 import Sidebar from "@/components/layout/Sidebar";
 import VideoCallModal from "@/components/modals/VideoCallModal";
+import IncomingCallModal from "@/components/modals/IncomingCallModal";
 import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
 import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
+import { useCallSocket } from "@/hooks/useCallSocket";
 import type { RootState } from '@/lib/store/index';
 import {
   setActiveView,
@@ -95,6 +97,15 @@ export default function HomePage() {
     unreadCount,
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
+
+  // Initialize call socket hook
+  const {
+    incomingCall,
+    isCallModalOpen,
+    acceptCall,
+    rejectCall,
+    closeCallModal,
+  } = useCallSocket();
 
   useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
@@ -273,11 +284,16 @@ const isValidObjectId = (id: string): boolean => {
   };
 
   const handleVideoCall = () => {
-    setVideoCallModalOpen(true);
+    if (selectedUser?.id) {
+      socketService.initiateCall(selectedUser.id, 'video');
+      setVideoCallModalOpen(true);
+    }
   };
 
   const handleVoiceCall = () => {
-    console.log("Starting voice call...");
+    if (selectedUser?.id) {
+      socketService.initiateCall(selectedUser.id, 'voice');
+    }
   };
 
   const handleBackToChat = () => {
@@ -508,6 +524,15 @@ const isValidObjectId = (id: string): boolean => {
             location: "AMERICA, CALIFORNIA",
             avatar: "/placeholder.svg?height=50&width=50",
           }}
+        />
+
+        {/* Incoming Call Modal */}
+        <IncomingCallModal
+          open={isCallModalOpen}
+          onClose={closeCallModal}
+          incomingCall={incomingCall}
+          onAccept={acceptCall}
+          onReject={rejectCall}
         />
       </div>
     </>
