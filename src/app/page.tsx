@@ -123,7 +123,14 @@ export default function HomePage() {
   const toggleTheme = () => {
     setIsDark((prev) => {
       const next = !prev;
-      localStorage.setItem("theme", next ? "dark" : "light");
+      try {
+        localStorage.setItem("theme", next ? "dark" : "light");
+        if (next) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {}
       return next;
     });
   };
