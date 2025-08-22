@@ -666,6 +666,91 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
   offUserTyping(callback?: (data: { userId: string; receiverId: string; isTyping: boolean }) => void) {
     this.socket?.off('typing', callback);
   }
+
+  // Call-related methods
+  initiateCall(receiverId: string, callType: 'voice' | 'video') {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Cannot initiate call: socket not connected');
+      return;
+    }
+
+    console.log(`📞 Initiating ${callType} call to ${receiverId}`);
+    this.socket.emit('initiate-call', {
+      receiverId,
+      type: callType,
+      callerId: this.currentUserId,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  acceptCall(callId: string) {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Cannot accept call: socket not connected');
+      return;
+    }
+
+    console.log(`✅ Accepting call: ${callId}`);
+    this.socket.emit('accept-call', { callId });
+  }
+
+  rejectCall(callId: string) {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Cannot reject call: socket not connected');
+      return;
+    }
+
+    console.log(`❌ Rejecting call: ${callId}`);
+    this.socket.emit('reject-call', { callId });
+  }
+
+  endCall(callId: string) {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Cannot end call: socket not connected');
+      return;
+    }
+
+    console.log(`📞 Ending call: ${callId}`);
+    this.socket.emit('end-call', { callId });
+  }
+
+  // Call event listeners
+  onIncomingCall(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('incoming-call');
+    this.socket.on('incoming-call', callback);
+  }
+
+  onCallAccepted(callback: (data: any) => void) {
+    this.socket?.off('call-accepted');
+    this.socket?.on('call-accepted', callback);
+  }
+
+  onCallRejected(callback: (data: any) => void) {
+    this.socket?.off('call-rejected');
+    this.socket?.on('call-rejected', callback);
+  }
+
+  onCallEnded(callback: (data: any) => void) {
+    this.socket?.off('call-ended');
+    this.socket?.on('call-ended', callback);
+  }
+
+  // Additional call event listeners
+  onCallOffer(callback: (data: any) => void) {
+    this.socket?.off('call-offer');
+    this.socket?.on('call-offer', callback);
+  }
+
+  onCallAnswer(callback: (data: any) => void) {
+    this.socket?.off('call-answer');
+    this.socket?.on('call-answer', callback);
+  }
+
+  onIceCandidate(callback: (data: any) => void) {
+    this.socket?.off('ice-candidate');
+    this.socket?.on('ice-candidate', callback);
+  }
 }
 
 export const socketService = new SocketService();
