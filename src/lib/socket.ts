@@ -240,7 +240,9 @@ joinChannel(chatId: string) {
 
       console.log('📤 Sending message:', message);
       
-      this.socket.emit('sendMessage', message, (response: any) => {
+      // Allow optional clientMessageId to pass through
+      const payload = { ...message };
+      this.socket.emit('sendMessage', payload, (response: any) => {
         console.log('📤 Send message response:', response);
         if (response?.error) {
           console.error('Send message error:', response.error);
@@ -343,7 +345,10 @@ hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
         return;
       }
 
-      this.socket.emit('replyMessage', data, (response: any) => {
+      // Pass through optional clientMessageId if present
+      const payload = { ...data } as any;
+
+      this.socket.emit('replyMessage', payload, (response: any) => {
         if (response?.error) {
           reject(new Error(response.error));
         } else {
@@ -363,7 +368,10 @@ hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
         return;
       }
 
-      this.socket.emit('forwardMessage', data, (response: any) => {
+      // Pass through optional clientMessageId if present
+      const payload = { ...data } as any;
+
+      this.socket.emit('forwardMessage', payload, (response: any) => {
         if (response?.error) {
           reject(new Error(response.error));
         } else {
@@ -507,7 +515,7 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
   private async toggleFavoriteViaAPI(data: any): Promise<void> {
     const token = Cookies.get('auth_token');
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/favorite`, {
-      method: 'PATCH',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -522,22 +530,24 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
 
   private async logCopyActionViaAPI(messageId: string): Promise<void> {
     const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/copy/${messageId}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/copy`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ messageId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to log copy action');
+      throw new Error('Failed to log copy');
     }
   }
 
   private async getFavoriteMessagesViaAPI(): Promise<any[]> {
     const token = Cookies.get('auth_token');
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/favorites`, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -545,11 +555,11 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
     });
 
     if (!response.ok) {
-      throw new Error('Failed to get favorite messages');
+      throw new Error('Failed to fetch favorite messages');
     }
 
     const data = await response.json();
-    return data;
+    return data.messages || [];
   }
 
   //  getSocket(): Socket | null {
