@@ -89,7 +89,13 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('✅ Media stream obtained successfully:', stream);
       
+      // Set the stream in state
       setLocalStream(stream);
+      
+      // Wait a bit to ensure state is updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      console.log('📹 Local stream set in state, returning stream');
       return stream;
     } catch (error: any) {
       console.error('❌ Error accessing media devices:', error);
@@ -119,25 +125,48 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
   // Call a user
   const callUser = useCallback(async (userId: string) => {
+    console.log('📞 callUser called with userId:', userId);
+    console.log('📹 Current localStream:', localStream);
+    
+    // Wait a bit for the stream to be set if it was just initialized
     if (!localStream) {
-      throw new Error('Local stream not initialized');
+      console.log('⏳ Waiting for local stream to be available...');
+      // Wait up to 2 seconds for the stream to be available
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (localStream) {
+          console.log('✅ Local stream is now available');
+          break;
+        }
+      }
+      
+      if (!localStream) {
+        throw new Error('Local stream not initialized after waiting');
+      }
     }
 
     setIsCalling(true);
+    console.log('🔗 Creating peer connection...');
     const pc = createPeerConnection();
 
     try {
+      console.log('📤 Creating offer...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      socketRef.current?.emit('call-user', {
+      const callData = {
         to: userId,
         from: currentUserId,
         offer,
         type: localStream.getVideoTracks().length > 0 ? 'video' : 'audio',
-      });
+      };
+      
+      console.log('📡 Emitting call-user event:', callData);
+      socketRef.current?.emit('call-user', callData);
+      
+      console.log('✅ Call initiated successfully');
     } catch (error) {
-      console.error('Error creating offer:', error);
+      console.error('❌ Error creating offer:', error);
       setIsCalling(false);
       throw error;
     }

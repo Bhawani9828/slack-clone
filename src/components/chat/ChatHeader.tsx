@@ -143,23 +143,53 @@ export default function ChatHeader({
   // Call handling functions
   const handleVideoCall = async () => {
     try {
-      await initLocalStream({ video: true, audio: true });
+      console.log('🎥 Starting video call...');
+      const stream = await initLocalStream({ video: true, audio: true });
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
+      console.log('✅ Media stream obtained, initiating call...');
       await callUser(contact.userId || '');
       setIsCallModalOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to initiate video call:', error);
-      alert('Failed to start video call. Please check your camera and microphone permissions.');
+      
+      let errorMessage = 'Failed to start video call. ';
+      if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your camera and microphone permissions.';
+      }
+      
+      alert(errorMessage);
     }
   };
 
   const handleVoiceCall = async () => {
     try {
-      await initLocalStream({ video: false, audio: true });
+      console.log('🎤 Starting voice call...');
+      const stream = await initLocalStream({ video: false, audio: true });
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
+      console.log('✅ Media stream obtained, initiating call...');
       await callUser(contact.userId || '');
       setIsCallModalOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to initiate voice call:', error);
-      alert('Failed to start voice call. Please check your microphone permissions.');
+      
+      let errorMessage = 'Failed to start voice call. ';
+      if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your microphone permissions.';
+      }
+      
+      alert(errorMessage);
     }
   };
 
