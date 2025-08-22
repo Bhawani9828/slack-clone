@@ -153,6 +153,18 @@ export default function HomePage() {
     }
   }, [chatType, groups, selectedGroup]);
 
+  // Auto-open the most recent/last-opened direct chat when switching to direct tab
+  useEffect(() => {
+    if (chatType !== "direct" || selectedUser) return;
+
+    const lastUserId = localStorage.getItem("lastSelectedUserId");
+    // Ask Sidebar to open last user via initialSelectedUserId prop
+    if (lastUserId) {
+      dispatch(setActiveView("chat"));
+      dispatch(setChatAreaActiveTab("chat"));
+    }
+  }, [chatType, selectedUser, dispatch]);
+
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
     return `channel_${sortedIds[0]}_${sortedIds[1]}`;
