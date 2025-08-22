@@ -505,7 +505,7 @@ export default function ChatInput({
   };
 
   return (
-    <div className="bg-[#fff] px-4 py-3">
+    <div className="chat-input px-4 py-3">
       <div className="flex items-end space-x-2">
         <input
           type="file"

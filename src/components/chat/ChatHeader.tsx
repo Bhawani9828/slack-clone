@@ -118,7 +118,7 @@ export default function ChatHeader({
   };
 
   return (
-    <div className="bg-[#e3f7f3] px-4 py-3 border-b border-gray-200 flex items-center justify-between h-28">
+    <div className="chat-header px-4 py-3 flex items-center justify-between h-28">
       {/* Left - Contact Info */}
       <div className="flex items-center space-x-3">
       {contact.userId && (
@@ -129,8 +129,8 @@ export default function ChatHeader({
   />
 )}
         <div>
-          <h3 className="font-medium text-[#015a4a]">{contact.name}</h3>
-          <p className="text-sm text-[#4b8d81]">
+          <h3 className="font-medium text-primary">{contact.name}</h3>
+          <p className="text-sm text-secondary">
             {isTyping ? "typing..." : 
              isGroupChat ? `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}` :
              contact.status || "Online"}

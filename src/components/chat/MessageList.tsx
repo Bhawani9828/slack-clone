@@ -409,27 +409,23 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
   }, [onForwardMessage])
 
   return (
-    <Box
-      sx={{
-        flex: 1,
-        overflowY: "auto",
-        px: 2,
-        py: 1,
-        "&::-webkit-scrollbar": { width: "6px" },
-        "&::-webkit-scrollbar-track": { background: "#f1f1f1" },
-        "&::-webkit-scrollbar-thumb": {
-          background: "#c1c1c1",
-          borderRadius: "3px",
-        },
-        "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
-        backgroundImage: `url(/2.jpg)`, 
-        backgroundRepeat: "repeat",
-        backgroundPosition: "top",
-        backgroundAttachment: "fixed", 
-        backgroundColor: "#e0f2f1",
-        margin: 0,
-        paddingTop: 0,
-      }}
+            <Box
+          sx={{
+            flex: 1,
+            overflowY: "auto",
+            px: 2,
+            py: 1,
+            "&::-webkit-scrollbar": { width: "6px" },
+            "&::-webkit-scrollbar-track": { background: "transparent" },
+            "&::-webkit-scrollbar-thumb": {
+              background: "#6b7280",
+              borderRadius: "3px",
+            },
+            "&::-webkit-scrollbar-thumb:hover": { background: "#9ca3af" },
+            backgroundColor: "var(--bg-app)",
+            margin: 0,
+            paddingTop: 0,
+          }}
     >
       {localMessages
         ?.filter((msg) => !!msg && !!msg.senderId)
@@ -496,8 +492,8 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
               }}>
                 <Card
                   sx={{
-                    bgcolor: isSentByCurrentUser ? "#01aa85" : "#ffffff",
-                    color: isSentByCurrentUser ? "#ffffff" : "#000",
+                    bgcolor: isSentByCurrentUser ? "var(--bubble-out)" : "var(--bubble-in)",
+                    color: isSentByCurrentUser ? "#ffffff" : "var(--text-primary)",
                     boxShadow: "0 1px 0.5px rgba(0,0,0,.13)",
                     borderRadius: isSentByCurrentUser ? "10px 10px 0 10px" : "10px 10px 10px 0",
                     p: msg.type === "image" || msg.type === "video" || msg.type === "file" ? 0.5 : 1.5,
