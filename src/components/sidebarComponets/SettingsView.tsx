@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
-import { Avatar, IconButton, Switch, TextField, Button, CircularProgress } from "@mui/material"
-import { ArrowBack, Edit, Notifications, Lock, Help, Info, Brightness4, Save } from "@mui/icons-material"
+import { Avatar, IconButton, Switch, TextField, Button, CircularProgress, Fade, Slide, Paper, Box, Typography, Divider } from "@mui/material"
+import { ArrowBack, Edit, Notifications, Lock, Help, Info, Brightness4, Save, Person, Chat, IntegrationInstructions, CameraAlt, CheckCircle, RadioButtonUnchecked, LocationOn } from "@mui/icons-material"
 import { getApi, postApi, putApi } from "@/axios/apiService"
 import API_ENDPOINTS from "@/axios/apiEndpoints"
 
@@ -53,21 +53,13 @@ export default function SettingsView({ isDark, onBackToChat }: SettingsViewProps
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState("")
 
-  // Color schemes
-  const bgColor = isDark ? "bg-gray-900" : "bg-white"
-  const cardBgColor = isDark ? "bg-gray-800" : "bg-gray-50"
-  const textColor = isDark ? "text-white" : "text-gray-900"
-  const secondaryTextColor = isDark ? "text-gray-400" : "text-gray-600"
-  const accentColor = "text-[#01aa85]"
-  const borderColor = isDark ? "border-gray-700" : "border-gray-200"
-
   // Fetch user profile
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         setIsLoading(true)
         const response = await getApi<ApiResponse>(API_ENDPOINTS.USER_PROFILE)
-        setProfile(response.data) // Updated to match nested API response structure
+        setProfile(response.data)
         setEditedName(response.data.name)
       } catch (err) {
         setError("Failed to load profile")
@@ -98,33 +90,31 @@ export default function SettingsView({ isDark, onBackToChat }: SettingsViewProps
   }
 
   // Update profile picture
- const handleProfilePictureUpdate = async (file: File) => {
-  try {
-    setIsUpdating(true);
-    const formData = new FormData();
-    formData.append('profilePicture', file);
+  const handleProfilePictureUpdate = async (file: File) => {
+    try {
+      setIsUpdating(true);
+      const formData = new FormData();
+      formData.append('profilePicture', file);
 
-    // Use postApi instead of putApi for file uploads
-    const response = await putApi<ApiUpdateResponse>(
-      API_ENDPOINTS.UPDATE_PROFILE, 
-      formData,
-      { isFormData: true } 
-    );
+      const response = await putApi<ApiUpdateResponse>(
+        API_ENDPOINTS.UPDATE_PROFILE, 
+        formData,
+        { isFormData: true } 
+      );
 
-    
-    setProfile(prev => ({
-      ...prev!,
-      profilePicture: response.data.data.profilePicture,
-      profilePicturePublicId: response.data.data.profilePicturePublicId
-    }));
+      setProfile(prev => ({
+        ...prev!,
+        profilePicture: response.data.data.profilePicture,
+        profilePicturePublicId: response.data.data.profilePicturePublicId
+      }));
 
-  } catch (err) {
-    setError("Failed to update profile picture");
-    console.error("Profile picture update error:", err);
-  } finally {
-    setIsUpdating(false);
-  }
-};
+    } catch (err) {
+      setError("Failed to update profile picture");
+      console.error("Profile picture update error:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const formatLastSeen = (lastSeen: string) => {
     const lastSeenDate = new Date(lastSeen)
@@ -141,225 +131,565 @@ export default function SettingsView({ isDark, onBackToChat }: SettingsViewProps
 
   if (isLoading) {
     return (
-      <div className={`h-screen w-100 ${bgColor} flex items-center justify-center`}>
-        <CircularProgress color="success" />
-      </div>
+      <Box sx={{
+        height: "100vh",
+        width: "320px",
+        backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: isDark 
+          ? "linear-gradient(135deg, #1e1e2e 0%, #181825 100%)"
+          : "linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%)",
+      }}>
+        <Box sx={{ textAlign: "center" }}>
+          <CircularProgress 
+            size={48}
+            sx={{ 
+              color: "#01aa85",
+              mb: 2,
+            }} 
+          />
+          <Typography sx={{ color: isDark ? "#cdd6f4" : "#1e1e2e" }}>
+            Loading settings...
+          </Typography>
+        </Box>
+      </Box>
     )
   }
 
   if (error) {
     return (
-      <div className={`h-screen w-80 ${bgColor} flex items-center justify-center`}>
-        <p className={`${textColor}`}>{error}</p>
-      </div>
+      <Box sx={{
+        height: "100vh",
+        width: "320px",
+        backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        <Typography sx={{ color: isDark ? "#f38ba8" : "#d20f39" }}>
+          {error}
+        </Typography>
+      </Box>
     )
   }
 
   return (
-    <div className={`h-screen w-80 ${bgColor} border-r ${borderColor} flex flex-col shadow-lg`}>
+    <Box sx={{
+      height: "100vh",
+      width: "420px",
+      backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
+      background: isDark 
+        ? "linear-gradient(135deg, #1e1e2e 0%, #181825 100%)"
+        : "linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%)",
+      borderRight: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: isDark 
+        ? "4px 0 20px rgba(0, 0, 0, 0.3)"
+        : "4px 0 20px rgba(0, 0, 0, 0.1)",
+      position: "relative",
+      "&::before": {
+        content: '""',
+        position: "absolute",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: "3px",
+        background: "linear-gradient(180deg, #01aa85, #00d4aa, #01aa85)",
+        backgroundSize: "100% 200%",
+        animation: "shimmer 3s ease-in-out infinite",
+      },
+      "@keyframes shimmer": {
+        "0%": { backgroundPosition: "0% -200%" },
+        "100%": { backgroundPosition: "0% 200%" },
+      },
+    }}>
       {/* Header */}
-      <div className={`px-4 py-4 border-b ${borderColor} flex items-center`}>
+      <Paper
+        elevation={0}
+        sx={{
+          px: 2,
+          py: 2.5,
+          background: isDark 
+            ? "linear-gradient(135deg, rgba(1, 170, 133, 0.1) 0%, rgba(30, 30, 46, 0.8) 100%)"
+            : "linear-gradient(135deg, rgba(1, 170, 133, 0.05) 0%, rgba(255, 255, 255, 0.9) 100%)",
+          backdropFilter: "blur(20px)",
+          borderBottom: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
         <IconButton 
-          onClick={onBackToChat} 
-          className={`mr-2 ${textColor}`}
-          aria-label="Back"
+          onClick={onBackToChat}
+          sx={{
+            mr: 2,
+            color: isDark ? "#cdd6f4" : "#1e1e2e",
+            "&:hover": {
+              backgroundColor: isDark ? "rgba(205, 214, 244, 0.1)" : "rgba(30, 30, 46, 0.1)",
+              transform: "scale(1.1)",
+            },
+            transition: "all 0.2s ease-in-out",
+          }}
         >
           <ArrowBack />
         </IconButton>
-        <h2 className={`text-xl font-bold ${textColor}`}>Settings</h2>
-      </div>
+        <Box>
+          <Typography variant="h5" sx={{ 
+            fontWeight: 700,
+            background: isDark 
+              ? "linear-gradient(135deg, #cdd6f4, #a6adc8)"
+              : "linear-gradient(135deg, #1e1e2e, #45475a)",
+            backgroundClip: "text",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}>
+            Settings
+          </Typography>
+          <Typography variant="body2" sx={{ 
+            color: isDark ? "#a6adc8" : "#6c6f85",
+            fontSize: "0.875rem",
+          }}>
+            Manage your preferences
+          </Typography>
+        </Box>
+      </Paper>
 
       {/* Profile Section */}
-      <div className="px-6 py-8 flex flex-col items-center">
-        <div className="relative mb-4 group">
-          <Avatar 
-            src={profile?.profilePicture || `https://ui-avatars.com/api/?name=${profile?.name || 'User'}&background=01aa85&color=fff`} 
-            className="w-32 h-32 text-4xl transition-all duration-300 group-hover:opacity-90"
-            sx={{ 
-              width: 128, 
-              height: 128,
-              border: '3px solid #01aa85'
-            }}
-          />
-          <IconButton 
-            className="absolute bottom-2 right-2 bg-[#01aa85] text-white shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100"
-            onClick={() => document.getElementById('profilePictureInput')?.click()}
-            sx={{ 
-              width: 40, 
-              height: 40,
-              backgroundColor: '#01aa85',
-              '&:hover': {
-                backgroundColor: '#028a6b'
-              }
-            }}
-          >
-            <Edit />
-          </IconButton>
-         <input
-      id="profilePictureInput"
-      type="file"
-      accept="image/*"
-      className="hidden"
-      onChange={async (e) => {
-        if (e.target.files?.[0]) {
-          try {
-            await handleProfilePictureUpdate(e.target.files[0]);
-            e.target.value = '';
-          } catch (error) {
-            console.error('Error updating profile picture:', error);
-          }
-        }
-      }}
-    />
-        </div>
-
-        {isEditing ? (
-          <div className="w-full max-w-xs space-y-4">
-            <TextField
-              fullWidth
-              variant="outlined"
-              label="Full Name"
-              size="medium"
-              value={editedName}
-              onChange={(e) => setEditedName(e.target.value)}
-              className={bgColor}
-              InputProps={{
-                className: textColor
-              }}
-            />
-            <TextField
-              fullWidth
-              variant="outlined"
-              label="Location"
-              size="medium"
-              value="Alabama, USA"
-              className={bgColor}
-              InputProps={{
-                className: textColor,
-                readOnly: true
-              }}
-            />
-            <div className="flex space-x-3">
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() => setIsEditing(false)}
-                className="border-gray-400 text-gray-600"
+      <Box sx={{ px: 3, py: 4, textAlign: "center" }}>
+        <Fade in timeout={800}>
+          <Box>
+            {/* Avatar Section */}
+            <Box sx={{ position: "relative", display: "inline-block", mb: 3 }}>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 0.5,
+                  borderRadius: "50%",
+                  background: isDark 
+                    ? "linear-gradient(135deg, rgba(1, 170, 133, 0.3), rgba(0, 212, 170, 0.2))"
+                    : "linear-gradient(135deg, rgba(1, 170, 133, 0.2), rgba(0, 212, 170, 0.1))",
+                  backdropFilter: "blur(10px)",
+                  border: `3px solid ${isDark ? "rgba(1, 170, 133, 0.4)" : "rgba(1, 170, 133, 0.3)"}`,
+                }}
               >
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                color="success"
-                fullWidth
-                onClick={handleSaveProfile}
-                startIcon={<Save />}
+                <Avatar 
+                  src={profile?.profilePicture || `https://ui-avatars.com/api/?name=${profile?.name || 'User'}&background=01aa85&color=fff`} 
+                  sx={{ 
+                    width: 120, 
+                    height: 120,
+                    fontSize: "2.5rem",
+                    fontWeight: 700,
+                    background: "linear-gradient(135deg, #01aa85, #00d4aa)",
+                    boxShadow: "0 8px 32px rgba(1, 170, 133, 0.3)",
+                  }}
+                />
+              </Paper>
+              
+              <IconButton 
+                onClick={() => document.getElementById('profilePictureInput')?.click()}
+                sx={{ 
+                  position: "absolute",
+                  bottom: 8,
+                  right: 8,
+                  width: 40,
+                  height: 40,
+                  background: "linear-gradient(135deg, #01aa85, #00d4aa)",
+                  color: "white",
+                  boxShadow: "0 4px 20px rgba(1, 170, 133, 0.4)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #008f6e, #01aa85)",
+                    transform: "scale(1.1)",
+                  },
+                  transition: "all 0.2s ease-in-out",
+                }}
                 disabled={isUpdating}
               >
-                {isUpdating ? <CircularProgress size={24} color="inherit" /> : 'Save'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center">
-            <h3 className={`text-2xl font-bold ${textColor} mb-1`}>
-              {profile?.name || 'Josephin water'}
-            </h3>
-            <p className={`text-md ${secondaryTextColor} mb-3`}>
-              Alabama, USA
-            </p>
-            <div className="flex items-center justify-center space-x-4">
-              <span className={`text-sm ${secondaryTextColor} flex items-center`}>
-                <span className={`w-2 h-2 rounded-full mr-2 ${profile?.isVerified ? 'bg-green-500' : 'bg-gray-500'}`}></span>
-                {profile?.isVerified ? 'Verified' : 'Not Verified'}
-              </span>
-              <span className={`text-sm ${secondaryTextColor}`}>
-                {formatLastSeen(profile?.lastSeen || new Date().toISOString())}
-              </span>
-            </div>
-            <Button
-              variant="text"
-              color="primary"
-              startIcon={<Edit />}
-              onClick={() => setIsEditing(true)}
-              className={`mt-4 ${textColor}`}
-            >
-              Edit Profile
-            </Button>
-          </div>
-        )}
-      </div>
+                {isUpdating ? <CircularProgress size={20} color="inherit" /> : <CameraAlt />}
+              </IconButton>
+              
+              <input
+                id="profilePictureInput"
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  if (e.target.files?.[0]) {
+                    try {
+                      await handleProfilePictureUpdate(e.target.files[0]);
+                      e.target.value = '';
+                    } catch (error) {
+                      console.error('Error updating profile picture:', error);
+                    }
+                  }
+                }}
+              />
+            </Box>
+
+            {/* Profile Info */}
+            {isEditing ? (
+              <Box sx={{ maxWidth: 280, mx: "auto", space: 2 }}>
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  label="Full Name"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  sx={{
+                    mb: 2.5,
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                      background: isDark 
+                        ? "rgba(49, 50, 68, 0.5)" 
+                        : "rgba(255, 255, 255, 0.8)",
+                      backdropFilter: "blur(10px)",
+                      "& fieldset": {
+                        borderColor: isDark ? "rgba(166, 173, 200, 0.3)" : "rgba(108, 111, 133, 0.3)",
+                      },
+                      "&:hover fieldset": {
+                        borderColor: "#01aa85",
+                      },
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#01aa85",
+                      },
+                    },
+                    "& .MuiInputLabel-root": {
+                      color: isDark ? "#a6adc8" : "#6c6f85",
+                      "&.Mui-focused": {
+                        color: "#01aa85",
+                      },
+                    },
+                    "& .MuiOutlinedInput-input": {
+                      color: isDark ? "#cdd6f4" : "#1e1e2e",
+                    },
+                  }}
+                />
+                
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  label="Location"
+                  value="Alabama, USA"
+                  disabled
+                  sx={{
+                    mb: 3,
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                      background: isDark 
+                        ? "rgba(49, 50, 68, 0.3)" 
+                        : "rgba(255, 255, 255, 0.5)",
+                    },
+                    "& .MuiInputLabel-root": {
+                      color: isDark ? "#a6adc8" : "#6c6f85",
+                    },
+                    "& .MuiOutlinedInput-input": {
+                      color: isDark ? "#a6adc8" : "#6c6f85",
+                    },
+                  }}
+                />
+                
+                <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    onClick={() => setIsEditing(false)}
+                    sx={{
+                      borderColor: isDark ? "rgba(166, 173, 200, 0.3)" : "rgba(108, 111, 133, 0.3)",
+                      color: isDark ? "#a6adc8" : "#6c6f85",
+                      borderRadius: 3,
+                      py: 1.5,
+                      fontWeight: 600,
+                      "&:hover": {
+                        borderColor: isDark ? "#a6adc8" : "#6c6f85",
+                        background: isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)",
+                      },
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={handleSaveProfile}
+                    startIcon={<Save />}
+                    disabled={isUpdating}
+                    sx={{
+                      background: "linear-gradient(135deg, #01aa85, #00d4aa)",
+                      borderRadius: 3,
+                      py: 1.5,
+                      fontWeight: 600,
+                      boxShadow: "0 4px 20px rgba(1, 170, 133, 0.3)",
+                      "&:hover": {
+                        background: "linear-gradient(135deg, #008f6e, #01aa85)",
+                        transform: "translateY(-1px)",
+                      },
+                      transition: "all 0.2s ease-in-out",
+                    }}
+                  >
+                    {isUpdating ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Box>
+                <Typography variant="h4" sx={{
+                  fontWeight: 700,
+                  color: isDark ? "#cdd6f4" : "#1e1e2e",
+                  mb: 1,
+                }}>
+                  {profile?.name || 'Josephin water'}
+                </Typography>
+                
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mb: 2, gap: 1 }}>
+                  <LocationOn sx={{ color: isDark ? "#a6adc8" : "#6c6f85", fontSize: 18 }} />
+                  <Typography sx={{ color: isDark ? "#a6adc8" : "#6c6f85" }}>
+                    Alabama, USA
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, mb: 3 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    {profile?.isVerified ? (
+                      <CheckCircle sx={{ color: "#40a9ff", fontSize: 18 }} />
+                    ) : (
+                      <RadioButtonUnchecked sx={{ color: isDark ? "#a6adc8" : "#6c6f85", fontSize: 18 }} />
+                    )}
+                    <Typography variant="body2" sx={{ color: isDark ? "#a6adc8" : "#6c6f85" }}>
+                      {profile?.isVerified ? 'Verified' : 'Not Verified'}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ color: isDark ? "#a6adc8" : "#6c6f85" }}>
+                    {formatLastSeen(profile?.lastSeen || new Date().toISOString())}
+                  </Typography>
+                </Box>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<Edit />}
+                  onClick={() => setIsEditing(true)}
+                  sx={{
+                    borderColor: "#01aa85",
+                    color: "#01aa85",
+                    borderRadius: 3,
+                    px: 3,
+                    py: 1.5,
+                    fontWeight: 600,
+                    "&:hover": {
+                      borderColor: "#008f6e",
+                      background: "rgba(1, 170, 133, 0.1)",
+                    },
+                  }}
+                >
+                  Edit Profile
+                </Button>
+              </Box>
+            )}
+          </Box>
+        </Fade>
+      </Box>
 
       {/* Settings Cards */}
-      <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
-        {/* Account Card */}
-        <div className={`p-4 rounded-xl ${cardBgColor} shadow-sm`}>
-          <h4 className={`text-sm font-semibold uppercase ${accentColor} mb-1`}>Account</h4>
-          <p className={`text-sm ${textColor}`}>Update Your Account Details</p>
-        </div>
+      <Box sx={{ flex: 1, overflow: "auto", px: 2, pb: 3 }}>
+        <Box sx={{ space: 2 }}>
+          {/* Settings Categories */}
+          {[
+            { 
+              icon: <Person sx={{ color: "#01aa85" }} />, 
+              title: "Account", 
+              description: "Update Your Account Details",
+              gradient: "linear-gradient(135deg, rgba(1, 170, 133, 0.1), rgba(0, 212, 170, 0.05))"
+            },
+            { 
+              icon: <Chat sx={{ color: "#f9e2af" }} />, 
+              title: "Chat", 
+              description: "Control Your Chat Backup",
+              gradient: "linear-gradient(135deg, rgba(249, 226, 175, 0.1), rgba(235, 203, 139, 0.05))"
+            },
+            { 
+              icon: <IntegrationInstructions sx={{ color: "#cba6f7" }} />, 
+              title: "Integration", 
+              description: "Sync Your Other Social Account",
+              gradient: "linear-gradient(135deg, rgba(203, 166, 247, 0.1), rgba(180, 150, 230, 0.05))"
+            },
+            { 
+              icon: <Help sx={{ color: "#94e2d5" }} />, 
+              title: "Help", 
+              description: "You are Confusion, Tell me",
+              gradient: "linear-gradient(135deg, rgba(148, 226, 213, 0.1), rgba(116, 199, 186, 0.05))"
+            },
+          ].map((item, index) => (
+            <Slide key={index} direction="left" in timeout={600 + index * 100}>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2.5,
+                  mb: 2,
+                  borderRadius: 3,
+                  background: isDark 
+                    ? item.gradient.replace('0.1', '0.15').replace('0.05', '0.08')
+                    : item.gradient,
+                  backdropFilter: "blur(10px)",
+                  border: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+                  cursor: "pointer",
+                  transition: "all 0.3s ease-in-out",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow: isDark 
+                      ? "0 8px 32px rgba(0, 0, 0, 0.3)"
+                      : "0 8px 32px rgba(0, 0, 0, 0.1)",
+                  },
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                  <Box sx={{ mr: 2 }}>{item.icon}</Box>
+                  <Typography variant="subtitle1" sx={{
+                    fontWeight: 700,
+                    color: isDark ? "#cdd6f4" : "#1e1e2e",
+                    textTransform: "uppercase",
+                    fontSize: "0.875rem",
+                    letterSpacing: "0.5px",
+                  }}>
+                    {item.title}
+                  </Typography>
+                </Box>
+                <Typography variant="body2" sx={{
+                  color: isDark ? "#a6adc8" : "#6c6f85",
+                  lineHeight: 1.4,
+                }}>
+                  {item.description}
+                </Typography>
+              </Paper>
+            </Slide>
+          ))}
+        </Box>
 
-        {/* Chat Card */}
-        <div className={`p-4 rounded-xl ${cardBgColor} shadow-sm`}>
-          <h4 className={`text-sm font-semibold uppercase ${accentColor} mb-1`}>Chat</h4>
-          <p className={`text-sm ${textColor}`}>Control Your Chat Backup</p>
-        </div>
+        <Divider sx={{ 
+          my: 3,
+          borderColor: isDark ? "rgba(166, 173, 200, 0.2)" : "rgba(108, 111, 133, 0.2)",
+        }} />
 
-        {/* Integration Card */}
-        <div className={`p-4 rounded-xl ${cardBgColor} shadow-sm`}>
-          <h4 className={`text-sm font-semibold uppercase ${accentColor} mb-1`}>Integration</h4>
-          <p className={`text-sm ${textColor}`}>Sync Your Other Social Account</p>
-        </div>
+        {/* Toggle Settings */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            mb: 2,
+            borderRadius: 3,
+            background: isDark 
+              ? "rgba(49, 50, 68, 0.3)" 
+              : "rgba(255, 255, 255, 0.8)",
+            backdropFilter: "blur(10px)",
+            border: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+          }}
+        >
+          <Typography variant="subtitle1" sx={{
+            fontWeight: 700,
+            color: isDark ? "#cdd6f4" : "#1e1e2e",
+            mb: 2,
+            textTransform: "uppercase",
+            fontSize: "0.875rem",
+            letterSpacing: "0.5px",
+          }}>
+            Preferences
+          </Typography>
 
-        {/* Help Card */}
-        <div className={`p-4 rounded-xl ${cardBgColor} shadow-sm`}>
-          <h4 className={`text-sm font-semibold uppercase ${accentColor} mb-1`}>Help</h4>
-          <p className={`text-sm ${textColor}`}>You are Confusion, Tell me</p>
-        </div>
-
-        {/* Toggles Section */}
-        <div className={`mt-6 pt-4 border-t ${borderColor}`}>
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center">
-              <Notifications className={`mr-3 ${accentColor}`} />
-              <span className={textColor}>Notifications</span>
-            </div>
-            <Switch 
-              checked={notificationEnabled}
-              onChange={() => setNotificationEnabled(!notificationEnabled)}
-              color="success"
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center">
-              <Brightness4 className={`mr-3 ${accentColor}`} />
-              <span className={textColor}>Dark Mode</span>
-            </div>
-            <Switch 
-              checked={darkModeEnabled}
-              onChange={() => setDarkModeEnabled(!darkModeEnabled)}
-              color="success"
-            />
-          </div>
-        </div>
+          {[
+            {
+              icon: <Notifications sx={{ color: "#f9e2af" }} />,
+              label: "Notifications",
+              checked: notificationEnabled,
+              onChange: () => setNotificationEnabled(!notificationEnabled),
+            },
+            {
+              icon: <Brightness4 sx={{ color: "#cba6f7" }} />,
+              label: "Dark Mode",
+              checked: darkModeEnabled,
+              onChange: () => setDarkModeEnabled(!darkModeEnabled),
+            },
+          ].map((toggle, index) => (
+            <Box key={index} sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              py: 2,
+              "&:not(:last-child)": {
+                borderBottom: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+              },
+            }}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <Box sx={{ mr: 2 }}>{toggle.icon}</Box>
+                <Typography sx={{ color: isDark ? "#cdd6f4" : "#1e1e2e", fontWeight: 500 }}>
+                  {toggle.label}
+                </Typography>
+              </Box>
+              <Switch 
+                checked={toggle.checked}
+                onChange={toggle.onChange}
+                sx={{
+                  "& .MuiSwitch-switchBase.Mui-checked": {
+                    color: "#01aa85",
+                    "&:hover": {
+                      backgroundColor: "rgba(1, 170, 133, 0.08)",
+                    },
+                  },
+                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+                    backgroundColor: "#01aa85",
+                  },
+                }}
+              />
+            </Box>
+          ))}
+        </Paper>
 
         {/* Additional Options */}
-        <div className="space-y-2 mt-4">
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 3,
+            background: isDark 
+              ? "rgba(49, 50, 68, 0.3)" 
+              : "rgba(255, 255, 255, 0.8)",
+            backdropFilter: "blur(10px)",
+            border: `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}`,
+            overflow: "hidden",
+          }}
+        >
           {[
-            { icon: <Lock className={accentColor} />, text: "Privacy Policy" },
-            { icon: <Help className={accentColor} />, text: "Help Center" },
-            { icon: <Info className={accentColor} />, text: "About" }
+            { icon: <Lock sx={{ color: "#f38ba8" }} />, text: "Privacy Policy" },
+            { icon: <Help sx={{ color: "#94e2d5" }} />, text: "Help Center" },
+            { icon: <Info sx={{ color: "#89b4fa" }} />, text: "About" }
           ].map((item, index) => (
-            <div
+            <Box
               key={index}
-              className={`flex items-center py-2 px-2 rounded-lg ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} cursor-pointer`}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                py: 2.5,
+                px: 2.5,
+                cursor: "pointer",
+                borderBottom: index < 2 
+                  ? `1px solid ${isDark ? "rgba(166, 173, 200, 0.1)" : "rgba(108, 111, 133, 0.1)"}` 
+                  : "none",
+                "&:hover": {
+                  background: isDark 
+                    ? "rgba(166, 173, 200, 0.1)" 
+                    : "rgba(108, 111, 133, 0.05)",
+                },
+                transition: "background-color 0.2s ease-in-out",
+              }}
             >
-              <div className="mr-3">{item.icon}</div>
-              <span className={textColor}>{item.text}</span>
-            </div>
+              <Box sx={{ mr: 2.5 }}>{item.icon}</Box>
+              <Typography sx={{ 
+                color: isDark ? "#cdd6f4" : "#1e1e2e",
+                fontWeight: 500,
+              }}>
+                {item.text}
+              </Typography>
+            </Box>
           ))}
-        </div>
-      </div>
-    </div>
+        </Paper>
+      </Box>
+    </Box>
   )
 }

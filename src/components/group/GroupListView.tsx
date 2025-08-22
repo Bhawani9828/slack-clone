@@ -197,8 +197,10 @@ export default function GroupListView({
 
             <ListItemText
               primary={
+                
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <Typography
+                   component="span"
                     variant="subtitle1"
                     sx={{
                       color: isDark ? "white" : "black",
@@ -246,6 +248,7 @@ export default function GroupListView({
                 <Box>
                   <Typography
                     variant="body2"
+                    component="span"
                     sx={{
                       color: isDark ? "#9ca3af" : "#6b7280",
                       overflow: "hidden",

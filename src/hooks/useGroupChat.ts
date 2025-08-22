@@ -105,6 +105,8 @@ export const useGroupChat = (groupId: string, currentUserId: string) => {
       groupChatSocketService.setCurrentUserId(currentUserId)
     }
   }, [currentUserId])
+  
+  
 
   // Fetch user groups
   // Fetch user groups

@@ -1,38 +1,33 @@
-// components/ChatInput.tsx - Fixed Double Messages Issue
-"use client";
+// components/ChatInput.tsx - Fixed Double Messages & Sending Issues
+"use client"
 
-import { useState, useEffect, useRef, ChangeEvent } from "react";
-import { TextField, IconButton } from "@mui/material";
-import {
-  Send,
-  EmojiEmotions,
-  Mic,
-  AttachFile,
-  Image,
-  VideoCameraBack,
-} from "@mui/icons-material";
-import API_ENDPOINTS from "@/axios/apiEndpoints";
-import axios from "axios";
-import { uploadThroughBackend, uploadToCloudinary } from "@/axios/cloudinaryService";
-import { postApi } from "@/axios/apiService";
-import { socketService } from "@/lib/socket";
-import { ApiMessage } from "@/types/chatTypes";
-import groupChatSocketService from "@/lib/group-chat-socket.service";
+import type React from "react"
 
+import { useState, useEffect, useRef, type ChangeEvent } from "react"
+import { TextField, IconButton } from "@mui/material"
+import { Send, EmojiEmotions, AttachFile, Image, VideoCameraBack } from "@mui/icons-material"
+import API_ENDPOINTS from "@/axios/apiEndpoints"
+import axios from "axios"
+import { uploadThroughBackend, uploadToCloudinary } from "@/axios/cloudinaryService"
+import { postApi } from "@/axios/apiService"
+import { socketService } from "@/lib/socket"
+import type { ApiMessage } from "@/types/chatTypes"
+import groupChatSocketService from "@/lib/group-chat-socket.service"
+import EmojiPicker from "./EmojiPicker";
 interface ChatInputProps {
-  currentUserId: string;
-  senderId: string;
-  receiverId: string;
-  groupId?: string;
-  channelId: string;
-  onMessageSent: (msg: any) => void;
-  onTyping?: (isTyping: boolean) => void;
+  currentUserId: string
+  senderId: string
+  receiverId: string
+  groupId?: string
+  channelId: string
+  onMessageSent: (msg: any) => void
+  onTyping?: (isTyping: boolean) => void
   replyingTo?: {
-    _id: string;
-    content: string;
-    senderId: string | { _id: string; name?: string };
-  } | null;   
-  forwarding?: ApiMessage | null;
+    _id: string
+    content: string
+    senderId: string | { _id: string; name?: string }
+  } | null
+  forwarding?: ApiMessage | null
 }
 
 export default function ChatInput({
@@ -44,304 +39,298 @@ export default function ChatInput({
   onMessageSent,
   onTyping,
   replyingTo,
-  forwarding
+  forwarding,
 }: ChatInputProps) {
-  const [message, setMessage] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSending, setIsSending] = useState(false); // ✅ Add sending state
-  
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const lastTypingSentRef = useRef<boolean>(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  // ✅ Track sent messages to prevent duplicates
-  const sentMessagesRef = useRef<Set<string>>(new Set());
-  // ✅ Reentrancy lock to prevent double-triggered sends (click + Enter, IME repeats)
-  const sendLockRef = useRef<boolean>(false);
-  // ✅ Remember last key to avoid repeated Enter due to key repeat
-  const lastEnterTimestampRef = useRef<number>(0);
+  const [message, setMessage] = useState("")
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSending, setIsSending] = useState(false)
 
-  const isGroupChat = !!groupId;
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const lastTypingSentRef = useRef<boolean>(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+const lastEnterTimestampRef = useRef<number>(0);
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
+  const isEmojiOpen = Boolean(emojiAnchorEl);
+
+  const openEmojiPicker = (e: React.MouseEvent<HTMLElement>) => {
+    setEmojiAnchorEl(e.currentTarget);
+  };
+  const closeEmojiPicker = () => setEmojiAnchorEl(null);
+
+  const insertAtCaret = (textToInsert: string) => {
+    const el = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!el) {
+      setMessage((prev) => prev + textToInsert);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const newValue = (message || "").slice(0, start) + textToInsert + (message || "").slice(end);
+    setMessage(newValue);
+    // Restore caret after state update in next tick
+    requestAnimationFrame(() => {
+      try {
+        el.focus();
+        const caret = start + textToInsert.length;
+        el.setSelectionRange(caret, caret);
+      } catch {}
+    });
+  };
+
+
+
+  // 🔒 Enhanced duplicate prevention
+  const sentMessagesRef = useRef<Set<string>>(new Set())
+  const sendingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const [messages, setMessages] = useState<any[]>([])
+  const isGroupChat = !!groupId
 
   const handleMessageChange = (value: string) => {
-    setMessage(value);
-    const isCurrentlyTyping = value.trim().length > 0;
-    
+    setMessage(value)
+    const isCurrentlyTyping = value.trim().length > 0
+
     if (isCurrentlyTyping !== lastTypingSentRef.current) {
       if (isGroupChat && groupId) {
         if (groupChatSocketService.isConnected()) {
           if (isCurrentlyTyping) {
-            groupChatSocketService.startGroupTyping(groupId);
+            groupChatSocketService.startGroupTyping(groupId)
           } else {
-            groupChatSocketService.stopGroupTyping(groupId);
+            groupChatSocketService.stopGroupTyping(groupId)
           }
-          lastTypingSentRef.current = isCurrentlyTyping;
-          onTyping?.(isCurrentlyTyping);
+          lastTypingSentRef.current = isCurrentlyTyping
+          onTyping?.(isCurrentlyTyping)
         }
       } else if (receiverId) {
         if (socketService.isConnected()) {
-          socketService.sendTypingIndicator(receiverId, isCurrentlyTyping);
-          lastTypingSentRef.current = isCurrentlyTyping;
-          onTyping?.(isCurrentlyTyping);
+          socketService.sendTypingIndicator(receiverId, isCurrentlyTyping)
+          lastTypingSentRef.current = isCurrentlyTyping
+          onTyping?.(isCurrentlyTyping)
         }
       }
     }
 
     if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+      clearTimeout(typingTimeoutRef.current)
     }
 
     if (isCurrentlyTyping) {
       typingTimeoutRef.current = setTimeout(() => {
         if (isGroupChat && groupId) {
           if (groupChatSocketService.isConnected()) {
-            groupChatSocketService.stopGroupTyping(groupId);
-            lastTypingSentRef.current = false;
-            onTyping?.(false);
+            groupChatSocketService.stopGroupTyping(groupId)
+            lastTypingSentRef.current = false
+            onTyping?.(false)
           }
         } else if (receiverId) {
           if (socketService.isConnected()) {
-            socketService.sendTypingIndicator(receiverId, false);
-            lastTypingSentRef.current = false;
-            onTyping?.(false);
+            socketService.sendTypingIndicator(receiverId, false)
+            lastTypingSentRef.current = false
+            onTyping?.(false)
           }
         }
-      }, 2000);
+      }, 2000)
     }
-  };
+  }
 
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+        clearTimeout(typingTimeoutRef.current)
+      }
+      if (sendingTimeoutRef.current) {
+        clearTimeout(sendingTimeoutRef.current)
       }
       if (lastTypingSentRef.current) {
         if (isGroupChat && groupId && groupChatSocketService.isConnected()) {
-          groupChatSocketService.stopGroupTyping(groupId);
+          groupChatSocketService.stopGroupTyping(groupId)
         } else if (receiverId && socketService.isConnected()) {
-          socketService.sendTypingIndicator(receiverId, false);
+          socketService.sendTypingIndicator(receiverId, false)
         }
       }
-    };
-  }, [receiverId, groupId, isGroupChat]);
+    }
+  }, [receiverId, groupId, isGroupChat])
 
-  // ✅ Build a stable client id for idempotency
-  const buildClientMessageId = (
-    content: string,
-    extra?: Record<string, string | undefined>
-  ) => {
-    const base = `${currentUserId}|${isGroupChat ? groupId : receiverId}|${channelId}|${content}`;
-    const extras = extra
-      ? Object.entries(extra)
-          .filter(([, v]) => !!v)
-          .map(([k, v]) => `${k}:${v}`)
-          .sort()
-          .join("|")
-      : "";
-    // Do NOT include Date.now() in key; stability prevents duplicates
-    return extras ? `${base}|${extras}` : base;
-  };
-
-  // ✅ Fixed send handler - prevent duplicates
   const handleSend = async () => {
-    // Quick guard
-    if (!message.trim() || !currentUserId || (!receiverId && !groupId)) {
-      return;
+    const now = Date.now()
+    const messageContent = message.trim()
+
+    // 🔒 Validation
+    if (!messageContent || !currentUserId || (!receiverId && !groupId)) {
+      return
     }
 
-    // Reentrancy lock
-    if (sendLockRef.current || isSending) {
-      return;
+    if (isSending) {
+      console.warn("❌ Already sending")
+      return
     }
-    sendLockRef.current = true;
+
+    console.log("[v0] Starting to send message, setting isSending to true")
+    setIsSending(true)
+
+    sendingTimeoutRef.current = setTimeout(() => {
+      console.warn("[v0] Send timeout reached, resetting isSending")
+      setIsSending(false)
+    }, 10000) // 10 second timeout
 
     try {
-      setIsSending(true);
+      console.log("🚀 Sending message...")
 
-      // Clear typing indicator
       if (lastTypingSentRef.current) {
         if (isGroupChat && groupId) {
-          groupChatSocketService.stopGroupTyping(groupId);
+          groupChatSocketService.stopGroupTyping(groupId)
         } else if (receiverId) {
-          socketService.sendTypingIndicator(receiverId, false);
+          socketService.sendTypingIndicator(receiverId, false)
         }
-        lastTypingSentRef.current = false;
-        onTyping?.(false);
+        lastTypingSentRef.current = false
+        onTyping?.(false)
       }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
 
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      setMessage("")
 
-      const messageToSend = message.trim();
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      // ✅ Stable idempotency key (no Date.now())
-      const messageKey = buildClientMessageId(messageToSend, {
-        replyTo: replyingTo?._id,
-        forwardingFrom: forwarding?._id,
-        type: "text",
-      });
-
+      const messageKey = `${messageContent}-${currentUserId}-${now}`
       if (sentMessagesRef.current.has(messageKey)) {
-        console.warn("❌ Duplicate message detected, ignoring");
-        return;
+        console.warn("❌ Duplicate message detected, ignoring")
+        return
       }
-      sentMessagesRef.current.add(messageKey);
-      // Keep only recent 50 keys
-      if (sentMessagesRef.current.size > 50) {
-        const entries = Array.from(sentMessagesRef.current);
-        entries.slice(0, entries.length - 50).forEach((entry) => {
-          sentMessagesRef.current.delete(entry);
-        });
-      }
+      sentMessagesRef.current.add(messageKey)
 
-      // Optimistic message
-      const optimisticMessage = {
-        _id: tempId,
+      const optimisticBase = {
+        _id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         senderId: currentUserId,
-        receiverId: isGroupChat ? groupId! : receiverId,
-        groupId: isGroupChat ? groupId : undefined,
-        content: messageToSend,
+        content: messageContent,
         type: "text" as const,
         createdAt: new Date().toISOString(),
-        isSent: true,
+        isSent: false,
         isDelivered: false,
         isRead: false,
-        fileUrl: "",
-        fileName: "",
-        fileSize: "",
-        channelId: isGroupChat ? groupId! : channelId,
-        clientMessageId: messageKey,
         ...(replyingTo && {
           replyTo: replyingTo._id,
           replyToContent: replyingTo.content,
-          replyToSender:
-            typeof replyingTo.senderId === "string"
-              ? replyingTo.senderId
-              : replyingTo.senderId._id,
+          replyToSender: typeof replyingTo.senderId === "string" ? replyingTo.senderId : replyingTo.senderId._id,
         }),
         ...(forwarding && { forwardingFrom: forwarding._id }),
-      };
-
-      onMessageSent(optimisticMessage);
-      setMessage("");
+      }
 
       if (isGroupChat && groupId) {
-        await groupChatSocketService.sendGroupMessage({
+        const optimisticMessage = {
+          ...optimisticBase,
           groupId,
-          content: messageToSend,
+          receiverId: groupId,
+          channelId: groupId,
+        }
+
+        onMessageSent(optimisticMessage)
+
+        if (!groupChatSocketService.isConnected()) {
+          throw new Error("Socket not connected for group chat")
+        }
+
+        const sentMessageId = await groupChatSocketService.sendGroupMessage({
+          groupId,
+          content: messageContent,
           type: "text",
           replyTo: replyingTo?._id,
-          // clientMessageId is not in type, but server may ignore unknown fields
-          // @ts-ignore
-          clientMessageId: messageKey,
-        });
+        })
+
+        console.log("✅ Group message sent via socket:", sentMessageId)
       } else if (receiverId) {
+        const optimisticMessage = {
+          ...optimisticBase,
+          receiverId,
+          channelId,
+        }
+
+        onMessageSent(optimisticMessage)
+
         if (socketService.isConnected()) {
           if (replyingTo) {
-            const replyData = {
+            await socketService.replyToMessage({
               originalMessageId: replyingTo._id,
               receiverId,
-              content: messageToSend,
+              content: messageContent,
               type: "text",
               channelId,
-              replyToContent: replyingTo.content,
-              replyToSender:
-                typeof replyingTo.senderId === "string"
-                  ? replyingTo.senderId
-                  : replyingTo.senderId._id,
-              // @ts-ignore
-              clientMessageId: messageKey,
-            };
-            await socketService.replyToMessage(replyData);
+            })
           } else if (forwarding) {
             await socketService.forwardMessage({
               messageId: forwarding._id,
               receiverIds: [receiverId],
-              // @ts-ignore
-              clientMessageId: messageKey,
-            });
+            })
           } else {
             await socketService.sendMessage({
               senderId: currentUserId,
               receiverId,
-              content: messageToSend,
+              content: messageContent,
               type: "text",
               channelId,
               createdAt: new Date().toISOString(),
-              // @ts-ignore
-              clientMessageId: messageKey,
-            });
+            })
           }
         } else {
           await postApi(API_ENDPOINTS.MESSAGES_SEND, {
             senderId: currentUserId,
             receiverId,
-            content: messageToSend,
+            content: messageContent,
             type: "text",
-            fileUrl: "",
-            fileName: "",
-            fileSize: "",
             channelId,
-            clientMessageId: messageKey,
-          });
+          })
         }
-      }
-    } catch (error) {
-      console.error("❌ Error sending message:", error);
-      // On error, allow retry by removing key
-      try {
-        const messageToSend = message.trim();
-        const messageKey = buildClientMessageId(messageToSend, {
-          replyTo: replyingTo?._id,
-          forwardingFrom: forwarding?._id,
-          type: "text",
-        });
-        sentMessagesRef.current.delete(messageKey);
-      } catch {}
-    } finally {
-      setIsSending(false);
-      sendLockRef.current = false;
-    }
-  };
 
-  // ✅ Enhanced file upload with duplicate prevention
-  const sendMessageToSocket = async (messageData: {
-    content: string;
-    type: string;
-    fileUrl?: string;
-    fileName?: string;
-    fileSize?: string | number;
-  }) => {
-    // Stable key by url+name+size+type
-    const messageKey = buildClientMessageId(messageData.content || messageData.fileUrl || "", {
-      type: messageData.type,
-      fileUrl: messageData.fileUrl,
-      fileName: messageData.fileName,
-      fileSize: messageData.fileSize?.toString(),
-    });
-    
-    if (sentMessagesRef.current.has(messageKey)) {
-      console.warn('❌ Duplicate file message detected, ignoring');
-      return;
+        console.log("✅ Direct message sent")
+      }
+
+      console.log("[v0] Message sent successfully")
+    } catch (error) {
+      console.error("❌ Error:", error)
+      setMessage(messageContent)
+      sentMessagesRef.current.delete(`${messageContent}-${currentUserId}-${now}`)
+      alert(`Failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+    } finally {
+      if (sendingTimeoutRef.current) {
+        clearTimeout(sendingTimeoutRef.current)
+        sendingTimeoutRef.current = null
+      }
+      console.log("[v0] Resetting isSending to false")
+      setIsSending(false)
     }
-    sentMessagesRef.current.add(messageKey);
+  }
+
+  const sendFileMessage = async (messageData: {
+    content: string
+    type: string
+    fileUrl?: string
+    fileName?: string
+    fileSize?: string | number
+  }) => {
+    const fileKey = `file-${messageData.fileUrl}-${Date.now()}`
+
+    if (sentMessagesRef.current.has(fileKey)) {
+      console.warn("❌ Duplicate file message detected, ignoring")
+      return
+    }
+
+    sentMessagesRef.current.add(fileKey)
 
     try {
       if (isGroupChat && groupId) {
-        if (groupChatSocketService.isConnected()) {
-          await groupChatSocketService.sendGroupMessage({
-            groupId,
-            content: messageData.content,
-            type: messageData.type as "text" | "image" | "video" | "file",
-            fileUrl: messageData.fileUrl,
-            fileName: messageData.fileName,
-            fileSize: messageData.fileSize?.toString(),
-            // @ts-ignore
-            clientMessageId: messageKey,
-          });
+        if (!groupChatSocketService.isConnected()) {
+          throw new Error("Socket not connected for group chat")
         }
+
+        const sentMessageId = await groupChatSocketService.sendGroupMessage({
+          groupId,
+          content: messageData.content,
+          type: messageData.type as "text" | "image" | "video" | "file",
+          fileUrl: messageData.fileUrl,
+          fileName: messageData.fileName,
+          fileSize: messageData.fileSize?.toString(),
+        })
+
+        console.log("✅ Group file sent via socket:", sentMessageId)
       } else if (receiverId) {
         if (socketService.isConnected()) {
           const socketPayload = {
@@ -349,75 +338,74 @@ export default function ChatInput({
             receiverId,
             content: messageData.content,
             type: messageData.type,
-            fileUrl: messageData.fileUrl || '',
-            fileName: messageData.fileName || '',
-            fileSize: messageData.fileSize?.toString() || '',
+            fileUrl: messageData.fileUrl || "",
+            fileName: messageData.fileName || "",
+            fileSize: messageData.fileSize?.toString() || "",
             channelId,
             createdAt: new Date().toISOString(),
-            // @ts-ignore
-            clientMessageId: messageKey,
-          };
+          }
 
-          console.log("📤 Sending file message via socket:", socketPayload);
-          await socketService.sendMessage(socketPayload);
+          await socketService.sendMessage(socketPayload)
         } else {
           const payload = {
             senderId,
             receiverId,
             content: messageData.content,
             type: messageData.type,
-            fileUrl: messageData.fileUrl || '',
-            fileName: messageData.fileName || '',
-            fileSize: messageData.fileSize?.toString() || '',
+            fileUrl: messageData.fileUrl || "",
+            fileName: messageData.fileName || "",
+            fileSize: messageData.fileSize?.toString() || "",
             channelId,
-            clientMessageId: messageKey,
-          };
+          }
 
-          await postApi(API_ENDPOINTS.MESSAGES_SEND, payload);
+          await postApi(API_ENDPOINTS.MESSAGES_SEND, payload)
         }
       }
     } catch (error) {
-      console.error('Error sending file message:', error);
-      sentMessagesRef.current.delete(messageKey);
-      throw error;
+      console.error("❌ Error sending file message:", error)
+      sentMessagesRef.current.delete(fileKey)
+      throw error
     }
-  };
+  }
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length || isUploading) return; // ✅ Prevent upload during ongoing upload
+    if (!e.target.files?.length || isUploading || isSending) return
 
-    const file = e.target.files[0];
-    
+    const file = e.target.files[0]
+
     try {
-      setIsUploading(true);
-      setUploadProgress(0);
+      setIsUploading(true)
+      setUploadProgress(0)
 
-      let fileCategory: 'image' | 'video' | 'file' = 'file';
-      if (file.type.startsWith('image/')) {
-        fileCategory = 'image';
-      } else if (file.type.startsWith('video/')) {
-        fileCategory = 'video';
+      let fileCategory: "image" | "video" | "file" = "file"
+      if (file.type.startsWith("image/")) {
+        fileCategory = "image"
+      } else if (file.type.startsWith("video/")) {
+        fileCategory = "video"
       }
 
-      const uploadMethod = file.size > 5 * 1024 * 1024 ? uploadThroughBackend : uploadToCloudinary;
-      
+      const uploadMethod = file.size > 5 * 1024 * 1024 ? uploadThroughBackend : uploadToCloudinary
+
       const data = await uploadMethod(file, fileCategory, (percentCompleted) => {
-        setUploadProgress(percentCompleted);
-      });
+        setUploadProgress(percentCompleted)
+      })
 
       if (!data?.secure_url) {
-        throw new Error('Upload failed - no URL returned');
+        throw new Error("Upload failed - no URL returned")
       }
 
-      const messageType = fileCategory;
+      const messageType = fileCategory
       const newMessage = {
         _id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         senderId: currentUserId,
         receiverId: isGroupChat ? groupId! : receiverId,
         groupId: isGroupChat ? groupId : undefined,
-        content: messageType === 'image' ? 'Sent an image' 
-                : messageType === 'video' ? 'Sent a video' 
-                : `Sent a file: ${file.name}`,
+        content:
+          messageType === "image"
+            ? "Sent an image"
+            : messageType === "video"
+              ? "Sent a video"
+              : `Sent a file: ${file.name}`,
         type: messageType,
         createdAt: new Date().toISOString(),
         isSent: true,
@@ -427,41 +415,67 @@ export default function ChatInput({
         fileName: file.name,
         fileSize: file.size.toString(),
         channelId: isGroupChat ? groupId! : channelId,
-      };
+      }
 
-      // ✅ Update UI immediately with optimistic message
-      onMessageSent(newMessage);
+      onMessageSent(newMessage)
 
-      await sendMessageToSocket({
+      setUploadProgress(100)
+
+      setTimeout(() => {
+        setIsUploading(false)
+        setUploadProgress(0)
+      }, 500)
+
+      await sendFileMessage({
         content: newMessage.content,
         type: newMessage.type,
         fileUrl: newMessage.fileUrl,
         fileName: newMessage.fileName,
         fileSize: newMessage.fileSize,
-      });
+      })
 
+      console.log("✅ File upload and send completed")
     } catch (error) {
-      let errorMessage = 'File upload failed';
-      
+      let errorMessage = "File upload failed"
+
       if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
+        errorMessage = error.message
+      } else if (typeof error === "string") {
+        errorMessage = error
       } else if (axios.isAxiosError(error)) {
-        errorMessage = error.response?.data?.message || error.message;
+        errorMessage = error.response?.data?.message || error.message
       }
-      
-      console.error('Upload failed:', error);
-      alert(errorMessage);
+
+      console.error("❌ Upload failed:", error)
+      alert(errorMessage)
+
+      setIsUploading(false)
+      setUploadProgress(0)
     } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+        fileInputRef.current.accept = "image/*,video/*,.pdf,.doc,.docx" // Reset accept attribute
+      }
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
+      // Prevent key-repeat double send
+      const now = Date.now();
+      if (now - lastEnterTimestampRef.current < 300) {
+        e.preventDefault();
+        return;
+      }
+      lastEnterTimestampRef.current = now;
+      e.preventDefault();
+      handleSend();
     }
   };
 
+
   return (
-    <div className="bg-[#fff] px-4 py-3">
+   <div className="chat-input px-4 py-3">
       <div className="flex items-end space-x-2">
         <input
           type="file"
@@ -472,20 +486,20 @@ export default function ChatInput({
         />
 
         <div className="flex space-x-1">
-          <IconButton 
+          <IconButton
             onClick={() => fileInputRef.current?.click()}
             className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
             title="Attach file"
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
+            disabled={isUploading || isSending}
           >
             <AttachFile />
           </IconButton>
-          
-          <IconButton 
+
+          <IconButton
             onClick={() => {
               if (fileInputRef.current) {
-                fileInputRef.current.accept = "image/*";
-                fileInputRef.current.click();
+                fileInputRef.current.accept = "image/*"
+                fileInputRef.current.click()
               }
             }}
             className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
@@ -494,12 +508,12 @@ export default function ChatInput({
           >
             <Image />
           </IconButton>
-          
-          <IconButton 
+
+          <IconButton
             onClick={() => {
               if (fileInputRef.current) {
-                fileInputRef.current.accept = "video/*";
-                fileInputRef.current.click();
+                fileInputRef.current.accept = "video/*"
+                fileInputRef.current.click()
               }
             }}
             className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
@@ -510,22 +524,28 @@ export default function ChatInput({
           </IconButton>
         </div>
 
-        <IconButton className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1">
+  <IconButton 
+          className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#008f6e] mb-1"
+          onClick={openEmojiPicker}
+          disabled={isUploading || isSending}
+        >
           <EmojiEmotions />
         </IconButton>
 
         <div className="flex-1">
           <TextField
+            inputRef={inputRef as any}
             fullWidth
             multiline
             maxRows={4}
             placeholder={isGroupChat ? "Message to group..." : "Write your message..."}
             value={message}
             onChange={(e) => handleMessageChange(e.target.value)}
+           onKeyDown={handleKeyDown}
             variant="outlined"
             size="small"
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
-            className="bg-white rounded-full"
+           disabled={isUploading || isSending}
+            className=" rounded-full"
             sx={{
               "& .MuiOutlinedInput-root": {
                 borderRadius: "25px",
@@ -535,56 +555,41 @@ export default function ChatInput({
                 "&.Mui-focused fieldset": { borderColor: "transparent" },
               },
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
-                // Prevent key-repeat double send
-                const now = Date.now();
-                if (now - lastEnterTimestampRef.current < 300) {
-                  e.preventDefault();
-                  return;
-                }
-                lastEnterTimestampRef.current = now;
-                e.preventDefault();
-                handleSend();
-              }
-            }}
           />
         </div>
 
-        {message.trim() ? (
-          <IconButton
-            onClick={handleSend}
-            className={`mb-1 !text-white ${isSending ? '!bg-gray-400' : '!bg-[#01aa85] hover:!bg-[#008f6e]'}`}
-            disabled={isUploading || isSending} // ✅ Disable during send/upload
-          >
-            <Send />
-          </IconButton>
-        ) : (
-          <IconButton className="mb-1 !text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552]">
-            <Mic />
-          </IconButton>
-        )}
+        <IconButton
+          onClick={handleSend}
+          className={`mb-1 !text-white transition-all ${
+            isSending ? "!bg-gray-400 cursor-not-allowed" : "!bg-[#01aa85] hover:!bg-[#008f6e]"
+          }`}
+          disabled={isUploading || isSending}
+        >
+          <Send />
+        </IconButton>
       </div>
 
-      {/* Upload progress indicator */}
+       {/* Emoji Picker */}
+      <EmojiPicker
+        anchorEl={emojiAnchorEl}
+        open={isEmojiOpen}
+        onClose={closeEmojiPicker}
+        onSelect={(emoji) => {
+          insertAtCaret(emoji);
+        }}
+      />
+
       {isUploading && (
         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-          <div 
-            className="bg-[#01aa85] h-2.5 rounded-full transition-all duration-300" 
+          <div
+             className="bg-[#01aa85] h-2.5 rounded-full transition-all duration-300"
             style={{ width: `${uploadProgress}%` }}
           ></div>
           <p className="text-sm text-gray-600 mt-1 text-center">
-            Uploading... {uploadProgress.toFixed(0)}%
+             {uploadProgress === 100 ? "Upload complete!" : `Uploading... ${uploadProgress.toFixed(0)}%`}
           </p>
         </div>
       )}
-
-      {/* ✅ Sending indicator */}
-      {isSending && (
-        <div className="mt-2 text-xs text-gray-500 text-center">
-          Sending message...
-        </div>
-      )}
     </div>
-  );
+  )
 }

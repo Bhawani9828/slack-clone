@@ -70,14 +70,14 @@ export default function DocumentView({ isDark, onBackToChat }: DocumentViewProps
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Document</h2>
+          <h2 className="text-lg font-semibold ">Document</h2>
           <p className="text-sm text-gray-600">Listing of Records...</p>
         </div>
         <div className="flex items-center space-x-2">
-          <IconButton size="small" className="text-gray-600">
+          <IconButton size="small" className="!text-gray-600">
             <Search />
           </IconButton>
-          <IconButton size="small" onClick={onBackToChat} className="text-gray-600">
+          <IconButton size="small" onClick={onBackToChat} className="!text-gray-600">
             <Close />
           </IconButton>
         </div>
@@ -91,14 +91,14 @@ export default function DocumentView({ isDark, onBackToChat }: DocumentViewProps
               {getFileIcon(doc.type)}
             </div>
             <div className="flex-1">
-              <h4 className="font-medium text-gray-900">{doc.name}</h4>
+              <h4 className="font-medium ">{doc.name}</h4>
               <p className="text-sm text-gray-500">{doc.date}</p>
             </div>
             <div className="flex items-center space-x-2">
-              <IconButton size="small" className="text-gray-600 hover:bg-gray-200">
+              <IconButton size="small" className="!text-gray-600 hover:bg-gray-200">
                 <Share fontSize="small" />
               </IconButton>
-              <IconButton size="small" className="text-gray-600 hover:bg-gray-200">
+              <IconButton size="small" className="!text-gray-600 hover:bg-gray-200">
                 <Download fontSize="small" />
               </IconButton>
             </div>

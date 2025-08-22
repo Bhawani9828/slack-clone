@@ -44,7 +44,7 @@ export default function ContactListView({ isDark, onContactClick }: ContactListV
             </div>
             <div className="flex-1 min-w-0">
               <h4 className={`font-medium ${textColor} truncate`}>{contact.name}</h4>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              <p className={`text-sm ${isDark ? "!text-gray-400" : "!text-gray-600"}`}>
                 {contact.isOnline ? "Online" : "Offline"}
               </p>
             </div>

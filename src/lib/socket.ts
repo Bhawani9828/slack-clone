@@ -1,6 +1,7 @@
 // socket.service.ts - Fixed Version
 import { io, Socket } from 'socket.io-client';
 import Cookies from 'js-cookie';
+import { ReplyMessagePayload } from '@/types/chatTypes';
 
 export interface DeleteOptions {
   isGroupChat?: boolean;
@@ -333,12 +334,7 @@ hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
 }
 
 
-  async replyToMessage(data: {
-    originalMessageId: string;
-    receiverId: string;
-    content: string;
-    type?: string;
-  }): Promise<any> {
+async replyToMessage(data: ReplyMessagePayload): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
         this.replyToMessageViaAPI(data).then(resolve).catch(reject);
@@ -589,6 +585,22 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
     });
   }
 
+
+
+onCallMade(callback: (data: { from: string, offer: any }) => void) {
+  this.socket?.on('call-made', callback);
+}
+
+makeAnswer(targetUserId: string, answer: any) {
+  this.socket?.emit('make-answer', { targetUserId, answer });
+}
+
+onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
+  this.socket?.on('answer-made', callback);
+}
+
+
+
   onMessageDelivered(callback: (data: any) => void) {
     if (!this.socket) return;
     
@@ -665,6 +677,86 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
 
   offUserTyping(callback?: (data: { userId: string; receiverId: string; isTyping: boolean }) => void) {
     this.socket?.off('typing', callback);
+  }
+
+   // Call-related methods
+
+     initiateCall(receiverId: string, callType: 'voice' | 'video') {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Cannot initiate call: socket not connected');
+      return;
+    }
+
+    console.log(`📞 Initiating ${callType} call to ${receiverId}`);
+    this.socket.emit('initiate-call', {
+      receiverId,
+      type: callType,
+      callerId: this.currentUserId,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
+    if (this.socket && this.socket.connected) {
+      console.log('📞 Initiating call:', data);
+      this.socket.emit('call-user', data);
+    } else {
+      console.warn('Cannot initiate call: socket not connected');
+    }
+  }
+
+  acceptCall(data: { to: string; from: string; answer: any }) {
+    if (this.socket && this.socket.connected) {
+      console.log('✅ Accepting call:', data);
+      this.socket.emit('call-accepted', data);
+    } else {
+      console.warn('Cannot accept call: socket not connected');
+    }
+  }
+
+   endCall(data: { to: string; from: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('❌ Ending call:', data);
+      this.socket.emit('end-call', data);
+    } else {
+      console.warn('Cannot end call: socket not connected');
+    }
+  }
+
+  sendIceCandidate(data: { to: string; candidate: any }) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit('ice-candidate', data);
+    } else {
+      console.warn('Cannot send ICE candidate: socket not connected');
+    }
+  }
+
+   // Call event listeners
+  onIncomingCall(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('incoming-call');
+    this.socket.on('incoming-call', callback);
+  }
+
+  onCallAccepted(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-accepted');
+    this.socket.on('call-accepted', callback);
+  }
+
+  onCallEnded(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-ended');
+    this.socket.on('call-ended', callback);
+  }
+    onIceCandidate(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('ice-candidate');
+    this.socket.on('ice-candidate', callback);
   }
 }
 

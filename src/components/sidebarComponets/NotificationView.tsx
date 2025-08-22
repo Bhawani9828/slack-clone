@@ -44,7 +44,7 @@ export default function NotificationView({ isDark, onBackToChat }: NotificationV
         <IconButton 
           size="small" 
           onClick={onBackToChat} 
-          className={`${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-600 hover:bg-gray-200"}`}
+          className={`${isDark ? "!text-gray-300 hover:bg-gray-700" : "text-gray-600 hover:bg-gray-200"}`}
         >
           <Close />
         </IconButton>
@@ -69,7 +69,7 @@ export default function NotificationView({ isDark, onBackToChat }: NotificationV
                 <h4 className={`font-medium ${textColor}`}>{notification.name}</h4>
                 <IconButton 
                   size="small" 
-                  className={`${isDark ? "text-gray-400 hover:text-gray-200 hover:bg-gray-700" : "text-gray-400 hover:text-gray-600 hover:bg-gray-200"}`}
+                  className={`${isDark ? "!text-gray-400 hover:text-gray-200 hover:bg-gray-700" : "text-gray-400 hover:text-gray-600 hover:bg-gray-200"}`}
                 >
                   <Close fontSize="small" />
                 </IconButton>

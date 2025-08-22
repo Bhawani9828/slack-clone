@@ -262,7 +262,7 @@ export default function ChatListView({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h4 style={{ 
                     fontWeight: isActiveChat ? 600 : 500, 
-                    color: textColor, 
+                  
                     overflow: 'hidden', 
                     textOverflow: 'ellipsis', 
                     whiteSpace: 'nowrap' 

@@ -14,8 +14,9 @@ import { setActiveView } from "@/lib/store/slices/sidebarSlice";
 import type { RootState } from "@/lib/store";
 interface LeftNavigationProps {
   isDark: boolean;
+  onToggleTheme?: () => void;
 }
-export default function LeftNavigation({ isDark }: LeftNavigationProps) {
+export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigationProps) {
   const dispatch = useDispatch();
   const { isLeftNavOpen, activeView } = useSelector(
     (state: RootState) => state.sidebar
@@ -39,7 +40,7 @@ export default function LeftNavigation({ isDark }: LeftNavigationProps) {
         dispatch(setActiveView("settings"));
         break;
       case "theme":
-        console.log("Theme toggle clicked");
+         onToggleTheme?.();
         break;
       case "logout":
         console.log("Logout clicked");

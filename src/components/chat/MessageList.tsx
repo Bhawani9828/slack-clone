@@ -179,14 +179,36 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
     ] || "",
   }))
 
-  const uniqueMessages = Array.from(
+  const byIdUnique = Array.from(
     new Map(enriched.map((msg) => [msg._id, msg])).values()
   )
 
+   const seen = new Set<string>()
+  const visuallyUnique: Message[] = []
+  for (const msg of byIdUnique) {
+    const sender = typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id
+    const createdAtSec = Math.floor(new Date(msg.createdAt).getTime() / 1000)
+    const key = [
+      msg.channelId ?? "",
+      sender,
+      msg.type,
+      msg.type === "text" ? msg.content.trim() : "",
+      msg.type !== "text" ? (msg.fileUrl || msg.fileName || "") : "",
+      createdAtSec,
+    ].join("|")
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      visuallyUnique.push(msg)
+    }
+  }
+
   // Exclude deleted messages
-  const filteredMessages = uniqueMessages.filter(
+  const filteredMessages = visuallyUnique.filter(
     msg => !deletedIds.includes(msg._id)
   )
+
+  
 
   setLocalMessages(filteredMessages)
 }, [messages, avatarMap, deletedIds])
@@ -305,9 +327,9 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
                 position: "absolute",
                 bottom: 8,
                 right: 8,
-                backgroundColor: "rgba(0,0,0,0.5)",
+               backgroundColor: "var(--media-overlay-bg)",
                 color: "white",
-                "&:hover": { backgroundColor: "rgba(0,0,0,0.7)" },
+               "&:hover": { backgroundColor: "var(--media-overlay-bg)" },
               }}
               onClick={(e) => {
                 e.stopPropagation()
@@ -338,9 +360,9 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
                 position: "absolute",
                 bottom: 8,
                 right: 8,
-                backgroundColor: "rgba(0,0,0,0.5)",
+                backgroundColor: "var(--media-overlay-bg)",
                 color: "white",
-                "&:hover": { backgroundColor: "rgba(0,0,0,0.7)" },
+                "&:hover": { backgroundColor: "var(--media-overlay-bg)" },
               }}
               onClick={(e) => {
                 e.stopPropagation()
@@ -418,15 +440,16 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
         "&::-webkit-scrollbar": { width: "6px" },
         "&::-webkit-scrollbar-track": { background: "#f1f1f1" },
         "&::-webkit-scrollbar-thumb": {
-          background: "#c1c1c1",
+           background: "#6b7280",
           borderRadius: "3px",
         },
-        "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
+         "&::-webkit-scrollbar-thumb:hover": { background: "#9ca3af" },
         backgroundImage: `url(/2.jpg)`, 
         backgroundRepeat: "repeat",
         backgroundPosition: "top",
         backgroundAttachment: "fixed", 
-        backgroundColor: "#e0f2f1",
+        // backgroundColor: "#e0f2f1",
+        
         margin: 0,
         paddingTop: 0,
       }}

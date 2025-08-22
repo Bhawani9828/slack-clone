@@ -507,7 +507,7 @@ const DEFAULT_AVATAR = "/default-avatar.png";
             <IconButton 
               size="small" 
               onClick={onBackToChat} 
-              className={secondaryTextColor}
+              className="!text-gray-400"
             >
               <Close />
             </IconButton>

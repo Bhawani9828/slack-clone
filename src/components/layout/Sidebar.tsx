@@ -256,6 +256,7 @@ const handleGroupClick = (group: ChatGroup) => {
     <IconButton
       size="small"
       onClick={() => setShowCreateGroupDialog(true)}
+      type="button"
       className={`${
         isDark ? "text-gray-300 !bg-[#043429]" : "text-gray-600 !bg-gray-200"
       }`}
@@ -338,12 +339,14 @@ const handleGroupClick = (group: ChatGroup) => {
       {/* Search */}
       <div className={`px-4 py-3 border-b ${borderColor}`}>
         <TextField
+        
           fullWidth
           size="small"
           placeholder="Search or start new chat"
           value={searchQuery}
           onChange={(e) => dispatch(setSearchQuery(e.target.value))}
           InputProps={{
+            spellCheck: false,
             startAdornment: (
               <InputAdornment position="start">
                 <Search className={`${isDark ? "text-gray-400" : "text-gray-400"}`} />

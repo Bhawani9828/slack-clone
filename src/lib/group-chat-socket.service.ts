@@ -36,6 +36,7 @@ export interface Group {
 
 export interface SendGroupMessagePayload {
   groupId: string
+  channelId?: string
   content: string
   type: "text" | "image" | "video" | "file"
   replyTo?: string
