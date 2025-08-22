@@ -120,6 +120,39 @@ export default function HomePage() {
     });
   }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
 
+  // Auto-open the most recent/last-opened group when switching to group tab
+  useEffect(() => {
+    if (chatType !== "group" || selectedGroup) return;
+
+    // Try last opened group first
+    const lastId = localStorage.getItem("lastSelectedGroupId");
+    let target = lastId
+      ? groups.find((g: any) => g?._id === lastId || g?.id === lastId)
+      : undefined;
+
+    // Otherwise, pick the most recently active group
+    if (!target && groups && groups.length > 0) {
+      const sorted = [...groups].sort((a: any, b: any) => {
+        const ta = new Date(a?.lastMessage?.createdAt || a?.updatedAt || a?.createdAt || 0).getTime();
+        const tb = new Date(b?.lastMessage?.createdAt || b?.updatedAt || b?.createdAt || 0).getTime();
+        return tb - ta;
+      });
+      target = sorted[0];
+    }
+
+    if (target) {
+      const chatGroup: ChatGroup = {
+        id: (target as any)._id || (target as any).id,
+        _id: (target as any)._id || (target as any).id,
+        name: (target as any).name,
+        description: (target as any).description,
+        avatar: (target as any).groupImage || (target as any).avatar,
+        members: (target as any).participants || (target as any).members || [],
+      };
+      handleGroupSelect(chatGroup);
+    }
+  }, [chatType, groups, selectedGroup]);
+
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
     return `channel_${sortedIds[0]}_${sortedIds[1]}`;
