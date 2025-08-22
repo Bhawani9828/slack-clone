@@ -179,12 +179,34 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
     ] || "",
   }))
 
-  const uniqueMessages = Array.from(
+  // First, dedupe by _id
+  const byIdUnique = Array.from(
     new Map(enriched.map((msg) => [msg._id, msg])).values()
   )
 
+  // Then, dedupe visually identical messages that may have different ids
+  const seen = new Set<string>()
+  const visuallyUnique: Message[] = []
+  for (const msg of byIdUnique) {
+    const sender = typeof msg.senderId === "string" ? msg.senderId : msg.senderId._id
+    const createdAtSec = Math.floor(new Date(msg.createdAt).getTime() / 1000)
+    const key = [
+      msg.channelId ?? "",
+      sender,
+      msg.type,
+      msg.type === "text" ? msg.content.trim() : "",
+      msg.type !== "text" ? (msg.fileUrl || msg.fileName || "") : "",
+      createdAtSec,
+    ].join("|")
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      visuallyUnique.push(msg)
+    }
+  }
+
   // Exclude deleted messages
-  const filteredMessages = uniqueMessages.filter(
+  const filteredMessages = visuallyUnique.filter(
     msg => !deletedIds.includes(msg._id)
   )
 
