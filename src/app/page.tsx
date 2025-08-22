@@ -168,13 +168,17 @@ const isValidObjectId = (id: string): boolean => {
 };
 
   // ✅ Group message handlers
-  const handleSendGroupMessage = async (content: string, type: "text" | "image" | "video" | "file" = "text") => {
-    if (!selectedGroup?.id || !content.trim()) return;
+  const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
+    if (!selectedGroup?.id || !msg.content.trim()) return;
 
     try {
       await sendGroupMessage({
-        content: content.trim(),
-        type,
+        content: msg.content.trim(),
+        type: msg.type || "text",
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        fileSize: msg.fileSize,
+        replyTo: msg.replyTo,
       });
     } catch (error) {
       console.error("Failed to send group message:", error);

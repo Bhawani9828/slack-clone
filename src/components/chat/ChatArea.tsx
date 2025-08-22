@@ -196,7 +196,13 @@ export default function ChatArea({
   if (isGroupChat && onSendGroupMessage) {
     // Handle group message
     try {
-      await onSendGroupMessage(msg.content, msg.type || "text");
+      await onSendGroupMessage({
+        content: msg.content,
+        type: msg.type || "text",
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        fileSize: msg.fileSize,
+      });
       
       // Clear reply/forward state after successful send
       if (replyingTo) {

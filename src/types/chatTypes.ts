@@ -153,7 +153,7 @@ export interface ChatAreaProps {
   groupMessages?: GroupMessage[];
   typingUsers?: string[];
   onlineUsers?: string[];
-  onSendGroupMessage?: (content: string, type?: "text" | "image" | "video" | "file") => Promise<void>;
+  onSendGroupMessage?: (data: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string; }) => Promise<void>;
   onGroupTyping?: () => void;
   onGroupStopTyping?: () => void;
   onDeleteGroupMessage?: (messageId: string) => Promise<void>;
