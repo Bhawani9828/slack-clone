@@ -18,6 +18,8 @@ interface CallSocketOptions {
 export const useCallSocket = (options: CallSocketOptions) => {
   const { currentUserId } = options;
   
+  console.log('🎯 useCallSocket initialized for user:', currentUserId);
+  
   // Basic call state
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
@@ -231,46 +233,67 @@ export const useCallSocket = (options: CallSocketOptions) => {
   // Setup socket listeners
   useEffect(() => {
     const socket = socketService.getSocket();
-    if (!socket) return;
+    if (!socket) {
+      console.log('❌ No socket available for call listeners');
+      return;
+    }
+
+    console.log('🔌 Setting up call socket listeners for user:', currentUserId);
+    console.log('🔌 Socket connected:', socket.connected);
+    console.log('🔌 Socket ID:', socket.id);
 
     // Listen for incoming calls
-    socket.on('incoming-call', handleIncomingCall);
+    socket.on('incoming-call', (data: any) => {
+      console.log('📞 [INCOMING-CALL] Event received:', data);
+      handleIncomingCall(data);
+    });
 
     // Listen for call offers
     socket.on('call-offer', async (data: any) => {
-      console.log('📞 Received call offer:', data);
+      console.log('📞 [CALL-OFFER] Event received:', data);
       // Handle incoming call offer
       handleIncomingCall(data);
     });
 
     // Listen for call accepted
     socket.on('call-accepted', (data: any) => {
-      console.log('✅ Call accepted:', data);
+      console.log('✅ [CALL-ACCEPTED] Event received:', data);
       setIsCalling(false);
       setIsInCall(true);
     });
 
     // Listen for call rejected
     socket.on('call-rejected', (data: any) => {
-      console.log('❌ Call rejected:', data);
+      console.log('❌ [CALL-REJECTED] Event received:', data);
       setIsCalling(false);
       endCall();
     });
 
     // Listen for call ended
     socket.on('call-ended', (data: any) => {
-      console.log('📞 Call ended:', data);
+      console.log('📞 [CALL-ENDED] Event received:', data);
       endCall();
     });
 
+    // Debug: Log all socket events
+    socket.onAny((event: string, ...args: any[]) => {
+      if (event.includes('call')) {
+        console.log(`🔍 [CALL DEBUG] Socket event: ${event}`, args);
+      }
+    });
+
+    console.log('✅ Call socket listeners setup complete');
+
     return () => {
-      socket.off('incoming-call', handleIncomingCall);
+      console.log('🧹 Cleaning up call socket listeners');
+      socket.off('incoming-call');
       socket.off('call-offer');
       socket.off('call-accepted');
       socket.off('call-rejected');
       socket.off('call-ended');
+      socket.offAny();
     };
-  }, [handleIncomingCall, endCall]);
+  }, [handleIncomingCall, endCall, currentUserId]);
 
   // Initialize audio on mount
   useEffect(() => {

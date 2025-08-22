@@ -639,6 +639,17 @@ const isValidObjectId = (id: string): boolean => {
           callerName={incomingCall?.callerName || selectedUser?.name || 'Unknown'}
           callerAvatar={selectedUser?.profilePicture || selectedUser?.avatar}
         />
+        
+        {/* Debug Call Modal State */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', borderRadius: '5px', zIndex: 9999 }}>
+            <div>CallModal Open: {!!incomingCall || isInCall || isCalling ? 'YES' : 'NO'}</div>
+            <div>Incoming Call: {incomingCall ? 'YES' : 'NO'}</div>
+            <div>Is Calling: {isCalling ? 'YES' : 'NO'}</div>
+            <div>Is In Call: {isInCall ? 'YES' : 'NO'}</div>
+            <div>Current User: {currentUserId}</div>
+          </div>
+        )}
 
       </div>
     </>
