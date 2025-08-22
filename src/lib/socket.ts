@@ -666,6 +666,71 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
   offUserTyping(callback?: (data: { userId: string; receiverId: string; isTyping: boolean }) => void) {
     this.socket?.off('typing', callback);
   }
+
+  // Call-related methods
+  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
+    if (this.socket && this.socket.connected) {
+      console.log('📞 Initiating call:', data);
+      this.socket.emit('call-user', data);
+    } else {
+      console.warn('Cannot initiate call: socket not connected');
+    }
+  }
+
+  acceptCall(data: { to: string; from: string; answer: any }) {
+    if (this.socket && this.socket.connected) {
+      console.log('✅ Accepting call:', data);
+      this.socket.emit('call-accepted', data);
+    } else {
+      console.warn('Cannot accept call: socket not connected');
+    }
+  }
+
+  endCall(data: { to: string; from: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('❌ Ending call:', data);
+      this.socket.emit('end-call', data);
+    } else {
+      console.warn('Cannot end call: socket not connected');
+    }
+  }
+
+  sendIceCandidate(data: { to: string; candidate: any }) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit('ice-candidate', data);
+    } else {
+      console.warn('Cannot send ICE candidate: socket not connected');
+    }
+  }
+
+  // Call event listeners
+  onIncomingCall(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('incoming-call');
+    this.socket.on('incoming-call', callback);
+  }
+
+  onCallAccepted(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-accepted');
+    this.socket.on('call-accepted', callback);
+  }
+
+  onCallEnded(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-ended');
+    this.socket.on('call-ended', callback);
+  }
+
+  onIceCandidate(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('ice-candidate');
+    this.socket.on('ice-candidate', callback);
+  }
 }
 
 export const socketService = new SocketService();

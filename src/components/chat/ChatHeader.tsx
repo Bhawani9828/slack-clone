@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type React from "react";
 import {
   Avatar,
@@ -19,6 +19,8 @@ import {
   Apps,
 } from "@mui/icons-material";
 import UserAvatar from "./UserAvatar";
+import { useCallSocket } from "@/hooks/useCallSocket";
+import CallModal from "../CallModal";
 
 interface Contact {
   userId: string;
@@ -74,6 +76,27 @@ export default function ChatHeader({
   onShowGroupMedia,
 }: ChatHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // Call-related state
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  
+  // Get current user ID from contact or context (you may need to adjust this)
+  const currentUserId = "current-user-id"; // Replace with actual current user ID
+  
+  const {
+    localStream,
+    remoteStream,
+    incomingCall,
+    isCalling,
+    isInCall,
+    callUser,
+    acceptCall,
+    endCall,
+    initLocalStream,
+  } = useCallSocket({ currentUserId });
 
   const handleLeaveGroup = async () => {
     if (onLeaveGroup && confirm("Are you sure you want to leave this group?")) {
@@ -117,6 +140,138 @@ export default function ChatHeader({
     handleMenuClose();
   };
 
+  // Call handling functions
+  const handleVideoCall = async () => {
+    try {
+      console.log('🎥 Starting video call...');
+      const stream = await initLocalStream({ video: true, audio: true });
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
+      console.log('✅ Media stream obtained, initiating call...');
+      console.log('📹 Stream details:', {
+        id: stream.id,
+        tracks: stream.getTracks().map(track => ({
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState
+        }))
+      });
+      
+      // Pass the stream directly to callUser
+      await callUser(contact.userId || '', stream);
+      
+      // Don't open modal immediately - wait for call state
+      console.log('📞 Call initiated, waiting for response...');
+    } catch (error: any) {
+      console.error('Failed to initiate video call:', error);
+      
+      let errorMessage = 'Failed to start video call. ';
+      if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your camera and microphone permissions.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const handleVoiceCall = async () => {
+    try {
+      console.log('🎤 Starting voice call...');
+      const stream = await initLocalStream({ video: false, audio: true });
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
+      console.log('✅ Media stream obtained, initiating call...');
+      console.log('🎤 Stream details:', {
+        id: stream.id,
+        tracks: stream.getTracks().map(track => ({
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState
+        }))
+      });
+      
+      // Pass the stream directly to callUser
+      await callUser(contact.userId || '', stream);
+      setIsCallModalOpen(true);
+    } catch (error: any) {
+      console.error('Failed to initiate voice call:', error);
+      
+      let errorMessage = 'Failed to start voice call. ';
+      if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your microphone permissions.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const handleAcceptCall = async () => {
+    try {
+      await acceptCall();
+      setIsCallModalOpen(true);
+    } catch (error) {
+      console.error('Failed to accept call:', error);
+    }
+  };
+
+  const handleRejectCall = () => {
+    if (incomingCall) {
+      // Reject the call
+      setIsCallModalOpen(false);
+    }
+  };
+
+  const handleEndCall = () => {
+    endCall();
+    setIsCallModalOpen(false);
+  };
+
+  const handleToggleMic = () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMicOn(audioTrack.enabled);
+      }
+    }
+  };
+
+  const handleToggleVideo = () => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOn(videoTrack.enabled);
+      }
+    }
+  };
+
+  const handleToggleSpeaker = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+    // You can implement speaker toggle logic here
+  };
+
+  // Show call modal when there's an incoming call, when in a call, or when calling
+  useEffect(() => {
+    if (incomingCall || isInCall || isCalling) {
+      console.log('📱 Opening call modal:', { incomingCall, isInCall, isCalling });
+      setIsCallModalOpen(true);
+    } else {
+      console.log('📱 Closing call modal');
+      setIsCallModalOpen(false);
+    }
+  }, [incomingCall, isInCall, isCalling]);
+
   return (
     <div className="bg-[#e3f7f3] px-4 py-3 border-b border-gray-200 flex items-center justify-between h-28">
       {/* Left - Contact Info */}
@@ -157,7 +312,7 @@ export default function ChatHeader({
         <VerticalDivider />
 
         <Tooltip title="Video Call" placement="bottom" arrow>
-          <IconButton onClick={onVideoCall} className="hover:bg-[#00a8841a] text-red-600">
+          <IconButton onClick={handleVideoCall} className="hover:bg-[#00a8841a] text-red-600">
             <VideoCall className="!text-[#00a884]" />
           </IconButton>
         </Tooltip>
@@ -165,7 +320,7 @@ export default function ChatHeader({
         <VerticalDivider />
 
         <Tooltip title="Voice Call" placement="bottom" arrow>
-          <IconButton onClick={onVoiceCall} className="hover:bg-[#00a8841a]">
+          <IconButton onClick={handleVoiceCall} className="hover:bg-[#00a8841a]">
             <Call className="!text-[#00a884]"/>
           </IconButton>
         </Tooltip>
@@ -221,6 +376,29 @@ export default function ChatHeader({
           )}
         </Menu>
       </div>
+
+      {/* Call Modal */}
+      <CallModal
+        open={isCallModalOpen}
+        onClose={() => setIsCallModalOpen(false)}
+        incomingCall={incomingCall}
+        localStream={localStream}
+        remoteStream={remoteStream}
+        isIncoming={!!incomingCall}
+        isInCall={isInCall}
+        isCalling={isCalling}
+        onAccept={handleAcceptCall}
+        onReject={handleRejectCall}
+        onEndCall={handleEndCall}
+        onToggleMic={handleToggleMic}
+        onToggleVideo={handleToggleVideo}
+        onToggleSpeaker={handleToggleSpeaker}
+        isMicOn={isMicOn}
+        isVideoOn={isVideoOn}
+        isSpeakerOn={isSpeakerOn}
+        callerName={contact.name}
+        callerAvatar={contact.profilePicture || contact.avatar}
+      />
     </div>
   );
 }
