@@ -679,29 +679,9 @@ onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
     this.socket?.off('typing', callback);
   }
 
-<<<<<<< HEAD
    // Call-related methods
 
-     initiateCall(receiverId: string, callType: 'voice' | 'video') {
-=======
-  // Call-related methods
-  initiateCall(receiverId: string, callType: 'voice' | 'video') {
->>>>>>> 5886b8598f4e7772e0cfad7ac57ea65483177fcc
-    if (!this.socket || !this.socket.connected) {
-      console.error('Cannot initiate call: socket not connected');
-      return;
-    }
-
-    console.log(`📞 Initiating ${callType} call to ${receiverId}`);
-    this.socket.emit('initiate-call', {
-      receiverId,
-      type: callType,
-      callerId: this.currentUserId,
-      timestamp: new Date().toISOString()
-    });
-  }
-<<<<<<< HEAD
-  
+   
   callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
     if (this.socket && this.socket.connected) {
       console.log('📞 Initiating call:', data);
@@ -738,40 +718,6 @@ onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
   }
 
    // Call event listeners
-=======
-
-  acceptCall(callId: string) {
-    if (!this.socket || !this.socket.connected) {
-      console.error('Cannot accept call: socket not connected');
-      return;
-    }
-
-    console.log(`✅ Accepting call: ${callId}`);
-    this.socket.emit('accept-call', { callId });
-  }
-
-  rejectCall(callId: string) {
-    if (!this.socket || !this.socket.connected) {
-      console.error('Cannot reject call: socket not connected');
-      return;
-    }
-
-    console.log(`❌ Rejecting call: ${callId}`);
-    this.socket.emit('reject-call', { callId });
-  }
-
-  endCall(callId: string) {
-    if (!this.socket || !this.socket.connected) {
-      console.error('Cannot end call: socket not connected');
-      return;
-    }
-
-    console.log(`📞 Ending call: ${callId}`);
-    this.socket.emit('end-call', { callId });
-  }
-
-  // Call event listeners
->>>>>>> 5886b8598f4e7772e0cfad7ac57ea65483177fcc
   onIncomingCall(callback: (data: any) => void) {
     if (!this.socket) return;
     
@@ -780,7 +726,6 @@ onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
   }
 
   onCallAccepted(callback: (data: any) => void) {
-<<<<<<< HEAD
     if (!this.socket) return;
     
     this.socket.off('call-accepted');
@@ -798,36 +743,6 @@ onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
     
     this.socket.off('ice-candidate');
     this.socket.on('ice-candidate', callback);
-=======
-    this.socket?.off('call-accepted');
-    this.socket?.on('call-accepted', callback);
-  }
-
-  onCallRejected(callback: (data: any) => void) {
-    this.socket?.off('call-rejected');
-    this.socket?.on('call-rejected', callback);
-  }
-
-  onCallEnded(callback: (data: any) => void) {
-    this.socket?.off('call-ended');
-    this.socket?.on('call-ended', callback);
-  }
-
-  // Additional call event listeners
-  onCallOffer(callback: (data: any) => void) {
-    this.socket?.off('call-offer');
-    this.socket?.on('call-offer', callback);
-  }
-
-  onCallAnswer(callback: (data: any) => void) {
-    this.socket?.off('call-answer');
-    this.socket?.on('call-answer', callback);
-  }
-
-  onIceCandidate(callback: (data: any) => void) {
-    this.socket?.off('ice-candidate');
-    this.socket?.on('ice-candidate', callback);
->>>>>>> 5886b8598f4e7772e0cfad7ac57ea65483177fcc
   }
 }
 

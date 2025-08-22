@@ -1,39 +1,50 @@
-"use client"
-import { useState, useEffect, useRef } from "react"
-import { Dialog, DialogContent, Avatar, IconButton, Typography, Box } from "@mui/material"
-import { 
-  CallEnd, 
-  Mic, 
-  MicOff, 
-  Videocam, 
-  VideocamOff, 
-  VolumeUp, 
-  VolumeOff,
+"use client";
+
+import { useEffect, useRef } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogActions,
+  Button,
+  IconButton,
+  Box,
+  Typography,
+  Avatar,
+} from '@mui/material';
+import {
   Call,
-  CallReceived
-} from "@mui/icons-material"
-import { IncomingCall } from "@/hooks/useCallSocket"
+  CallEnd,
+  Mic,
+  MicOff,
+  Videocam,
+  VideocamOff,
+  VolumeUp,
+  VolumeOff,
+} from '@mui/icons-material';
 
 interface CallModalProps {
-  open: boolean
-  onClose: () => void
-  incomingCall: IncomingCall | null
-  localStream: MediaStream | null
-  remoteStream: MediaStream | null
-  isIncoming: boolean
-  isInCall: boolean
-  isCalling: boolean
-  onAccept: () => void
-  onReject: () => void
-  onEndCall: () => void
-  onToggleMic: () => void
-  onToggleVideo: () => void
-  onToggleSpeaker: () => void
-  isMicOn: boolean
-  isVideoOn: boolean
-  isSpeakerOn: boolean
-  callerName: string
-  callerAvatar?: string
+  open: boolean;
+  onClose: () => void;
+ incomingCall: {
+    from: string;
+    type: 'video' | 'audio';
+    offer: any;
+  } | null;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  isIncoming: boolean;
+  isInCall: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+  onEndCall: () => void;
+  onToggleMic: () => void;
+  onToggleVideo: () => void;
+  onToggleSpeaker: () => void;
+  isMicOn: boolean;
+  isVideoOn: boolean;
+  isSpeakerOn: boolean;
+  callerName: string;
+  callerAvatar?: string;
 }
 
 export default function CallModal({
@@ -44,7 +55,6 @@ export default function CallModal({
   remoteStream,
   isIncoming,
   isInCall,
-  isCalling,
   onAccept,
   onReject,
   onEndCall,
@@ -55,189 +65,220 @@ export default function CallModal({
   isVideoOn,
   isSpeakerOn,
   callerName,
-  callerAvatar
+  callerAvatar,
 }: CallModalProps) {
-  const [callDuration, setCallDuration] = useState(0)
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Handle video streams
-  useEffect(() => {
+
+   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream
+      localVideoRef.current.srcObject = localStream;
     }
-  }, [localStream])
+  }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream
+      remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [remoteStream])
-
-  // Call duration timer
-  useEffect(() => {
-    if (open && (isInCall || isCalling)) {
-      const startTime = Date.now()
-      const interval = setInterval(() => {
-        setCallDuration(Math.floor((Date.now() - startTime) / 1000))
-      }, 1000)
-
-      return () => clearInterval(interval)
-    }
-  }, [open, isInCall, isCalling])
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
+  }, [remoteStream]);
 
   const handleAccept = () => {
-    onAccept()
-  }
+    onAccept();
+  };
 
   const handleReject = () => {
-    onReject()
-    onClose()
-  }
+    onReject();
+    onClose();
+  };
 
   const handleEndCall = () => {
-    onEndCall()
-    onClose()
-  }
+    onEndCall();
+    onClose();
+  };
 
-  // Don't render if not open
-  if (!open) return null
+   if (!open) return null;
 
-  return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth={false} 
+
+    return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
-      className="call-modal"
+      PaperProps={{
+        style: {
+          backgroundColor: '#1a1a1a',
+          color: 'white',
+          borderRadius: '16px',
+        },
+      }}
     >
-      <DialogContent className="p-0 bg-black relative h-screen">
-        {/* Call Header */}
-        <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent p-4">
-          <div className="flex items-center space-x-3 text-white">
-            <Avatar src={callerAvatar} className="w-10 h-10" />
-            <div>
-              <Typography variant="h6" className="font-medium">
-                {callerName}
-              </Typography>
-              <Typography variant="body2" className="text-gray-300">
-                {isIncoming ? 'Incoming Call' : isCalling ? 'Calling...' : 'In Call'}
-              </Typography>
-            </div>
-          </div>
-          {callDuration > 0 && (
-            <div className="text-center mt-2">
-              <Typography variant="body2" className="text-white font-mono">
-                {formatTime(callDuration)}
-              </Typography>
-            </div>
-          )}
-        </div>
-
-        {/* Main Video Area */}
-        <div className="relative h-full bg-gray-900">
-          {/* Remote Video (Main) */}
+      <DialogContent sx={{ p: 0, position: 'relative' }}>
+        {/* Remote Video (Main View) */}
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: '400px',
+            backgroundColor: '#000',
+            borderRadius: '16px 16px 0 0',
+            overflow: 'hidden',
+          }}
+        >
           {remoteStream ? (
-            <video
+
+                      <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center">
-              <div className="text-center text-white">
-                <Avatar src={callerAvatar} className="w-32 h-32 mx-auto mb-4" />
-                <Typography variant="h5" className="mb-2">
-                  {callerName}
-                </Typography>
-                <Typography variant="body1" className="text-gray-300">
-                  {isIncoming ? 'Incoming Call' : isCalling ? 'Calling...' : 'Connecting...'}
-                </Typography>
-              </div>
-            </div>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                backgroundColor: '#2a2a2a',
+              }}
+            >
+              <Avatar
+                src={callerAvatar}
+                sx={{ width: 80, height: 80, mb: 2 }}
+              >
+                {callerName.charAt(0).toUpperCase()}
+              </Avatar>
+
+                          <Typography variant="h6" sx={{ color: 'white' }}>
+                {callerName}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#ccc' }}>
+                {isIncoming ? 'Incoming call...' : 'Calling...'}
+              </Typography>
+            </Box>
           )}
 
           {/* Local Video (Picture-in-Picture) */}
           {localStream && isVideoOn && (
-            <div className="absolute bottom-20 left-4 w-32 h-24 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                width: 120,
+                height: 90,
+                borderRadius: '8px',
+                overflow: 'hidden',
+                border: '2px solid #00a884',
+              }}
+            >
               <video
                 ref={localVideoRef}
                 autoPlay
                 playsInline
-                muted
-                className="w-full h-full object-cover"
+                 muted
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
               />
-            </div>
+            </Box>
           )}
+        </Box>
 
-          {/* Call Status Overlay */}
-          {isIncoming && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="text-center text-white">
-                <Avatar src={callerAvatar} className="w-32 h-32 mx-auto mb-6" />
-                <Typography variant="h4" className="mb-2">
-                  {callerName}
-                </Typography>
-                <Typography variant="h6" className="mb-6 text-gray-300">
-                  Incoming {incomingCall?.type === 'video' ? 'Video' : 'Voice'} Call
-                </Typography>
-                
-                {/* Accept/Reject Buttons */}
-                <div className="flex justify-center space-x-6">
-                  <IconButton
-                    onClick={handleAccept}
-                    className="w-16 h-16 bg-green-500 hover:bg-green-600 text-white"
-                    sx={{ width: 64, height: 64 }}
-                  >
-                    <Call className="w-8 h-8" />
-                  </IconButton>
-                  
-                  <IconButton
-                    onClick={handleReject}
-                    className="w-16 h-16 bg-red-500 hover:bg-red-600 text-white"
-                    sx={{ width: 64, height: 64 }}
-                  >
-                    <CallEnd className="w-8 h-8" />
-                  </IconButton>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Call Controls */}
+        <Box
+          sx={{
+            p: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          {/* Caller Info */}
+          <Box sx={{ textAlign: 'center', mb: 2 }}>
+            <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
+              {callerName}
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#ccc' }}>
+              {isIncoming ? 'Incoming call' : 'Calling...'}
+            </Typography>
 
-        {/* Call Controls - Only show when in call or calling */}
-        {(isInCall || isCalling) && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-6">
-            <div className="flex items-center justify-center space-x-6">
+             </Box>
+
+                  {/* Call Action Buttons */}
+          {isIncoming && !isInCall ? (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <IconButton
+                onClick={handleAccept}
+                sx={{
+                  backgroundColor: '#00a884',
+                  color: 'white',
+                  width: 56,
+                  height: 56,
+                  '&:hover': {
+                    backgroundColor: '#008f6f',
+                  },
+                }}
+              >
+                <Call />
+              </IconButton>
+              <IconButton
+                onClick={handleReject}
+                sx={{
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  width: 56,
+                  height: 56,
+                  '&:hover': {
+                    backgroundColor: '#b91c1c',
+                  },
+                }}
+              >
+                <CallEnd />
+              </IconButton>
+            </Box>
+
+                 ) : (
+            <Box sx={{ display: 'flex', gap: 2 }}>
               {/* Mic Toggle */}
               <IconButton
                 onClick={onToggleMic}
-                className={`w-14 h-14 ${isMicOn ? "bg-gray-700 hover:bg-gray-600" : "bg-red-500 hover:bg-red-600"} text-white`}
+                sx={{
+                  backgroundColor: isMicOn ? '#00a884' : '#666',
+                  color: 'white',
+                  width: 48,
+                  height: 48,
+                  '&:hover': {
+                    backgroundColor: isMicOn ? '#008f6f' : '#555',
+                  },
+                }}
               >
                 {isMicOn ? <Mic /> : <MicOff />}
               </IconButton>
 
-              {/* End Call */}
-              <IconButton
-                onClick={handleEndCall}
-                className="w-16 h-16 bg-red-500 hover:bg-red-600 text-white"
-                sx={{ width: 64, height: 64 }}
-              >
-                <CallEnd />
-              </IconButton>
-
-              {/* Video Toggle - Only for video calls */}
+              {/* Video Toggle (only for video calls) */}
               {incomingCall?.type === 'video' && (
                 <IconButton
                   onClick={onToggleVideo}
-                  className={`w-14 h-14 ${isVideoOn ? "bg-gray-700 hover:bg-gray-600" : "bg-red-500 hover:bg-red-600"} text-white`}
+                  sx={{
+                    backgroundColor: isVideoOn ? '#00a884' : '#666',
+                    color: 'white',
+                    width: 48,
+                    height: 48,
+                           '&:hover': {
+                      backgroundColor: isVideoOn ? '#008f6f' : '#555',
+                    },
+                  }}
                 >
                   {isVideoOn ? <Videocam /> : <VideocamOff />}
                 </IconButton>
@@ -246,14 +287,38 @@ export default function CallModal({
               {/* Speaker Toggle */}
               <IconButton
                 onClick={onToggleSpeaker}
-                className={`w-14 h-14 ${isSpeakerOn ? "bg-gray-700 hover:bg-gray-600" : "bg-red-500 hover:bg-red-600"} text-white`}
+                sx={{
+                  backgroundColor: isSpeakerOn ? '#00a884' : '#666',
+                  color: 'white',
+                  width: 48,
+                  height: 48,
+                  '&:hover': {
+                    backgroundColor: isSpeakerOn ? '#008f6f' : '#555',
+                  },
+                }}
               >
                 {isSpeakerOn ? <VolumeUp /> : <VolumeOff />}
               </IconButton>
-            </div>
-          </div>
-        )}
+
+              {/* End Call */}
+              <IconButton
+                onClick={handleEndCall}
+                         sx={{
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  width: 48,
+                  height: 48,
+                  '&:hover': {
+                    backgroundColor: '#b91c1c',
+                  },
+                }}
+              >
+                <CallEnd />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

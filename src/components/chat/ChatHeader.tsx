@@ -91,7 +91,6 @@ export default function ChatHeader({
     remoteStream,
     incomingCall,
     isCalling,
-  
     isInCall,
     callUser,
     acceptCall,
@@ -195,7 +194,7 @@ export default function ChatHeader({
     setIsCallModalOpen(false);
   };
 
-  const handleToggleMic = () => {
+    const handleToggleMic = () => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
@@ -215,21 +214,17 @@ export default function ChatHeader({
     }
   };
 
-   const handleToggleSpeaker = () => {
+    const handleToggleSpeaker = () => {
     setIsSpeakerOn(!isSpeakerOn);
     // You can implement speaker toggle logic here
   };
 
   // Show call modal when there's an incoming call or when in a call
- useEffect(() => {
-    if (incomingCall || isInCall || isCalling) {
-      console.log('📱 Opening call modal:', { incomingCall, isInCall, isCalling });
+  useEffect(() => {
+    if (incomingCall || isInCall) {
       setIsCallModalOpen(true);
-    } else {
-      console.log('📱 Closing call modal');
-      setIsCallModalOpen(false);
     }
-  }, [incomingCall, isInCall, isCalling]);
+  }, [incomingCall, isInCall]);
 
   const handleLeaveGroup = async () => {
     if (onLeaveGroup && confirm("Are you sure you want to leave this group?")) {
@@ -365,7 +360,7 @@ export default function ChatHeader({
 
       </div>
         {/* Call Modal */}
-       <CallModal
+      <CallModal
         open={isCallModalOpen}
         onClose={() => setIsCallModalOpen(false)}
         incomingCall={incomingCall}
@@ -373,7 +368,6 @@ export default function ChatHeader({
         remoteStream={remoteStream}
         isIncoming={!!incomingCall}
         isInCall={isInCall}
-        isCalling={isCalling}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
         onEndCall={handleEndCall}

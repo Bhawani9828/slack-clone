@@ -1,16 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from 'react-redux';
-import { useCallSocket } from "@/hooks/useCallSocket";
-import CallModal from "@/components/modals/CallModal";
 import ChatArea from "@/components/chat/ChatArea";
 import Sidebar from "@/components/layout/Sidebar";
 import VideoCallModal from "@/components/modals/VideoCallModal";
+import CallModal from "@/components/modals/CallModal";
 import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
 import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
-import { useCallSocket } from "@/hooks/useCallSocket";
 import type { RootState } from '@/lib/store/index';
+import { useCallSocket } from "@/hooks/useCallSocket";
 import {
   setActiveView,
   setChatAreaActiveTab,
@@ -59,6 +58,7 @@ export default function HomePage() {
   const [initialSelectedUserId, setInitialSelectedUserId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserName, setCurrentUserName] = useState<string>("");
+ const chatusers = useSelector((state: RootState) => state.user.chatusers);
 
  // Call-related state
   const [isMicOn, setIsMicOn] = useState(true);
@@ -102,6 +102,21 @@ export default function HomePage() {
     unreadCount,
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
+
+    // Initialize call socket hook
+  const {
+    localStream,
+    remoteStream,
+    incomingCall,
+    isCalling,
+    isInCall,
+    callUser,
+    acceptCall,
+    endCall,
+    initLocalStream,
+  } = useCallSocket({ currentUserId });
+
+  
 
   useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
@@ -152,6 +167,67 @@ export default function HomePage() {
       isGroupConnected,
     });
   }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
+
+   // Auto-open the most recent/last-opened group when switching to group tab
+  useEffect(() => {
+    if (chatType !== "group" || selectedGroup) return;
+
+    // Try last opened group first
+    const lastId = localStorage.getItem("lastSelectedGroupId");
+    let target = lastId
+      ? groups.find((g: any) => g?._id === lastId || g?.id === lastId)
+      : undefined;
+
+    // Otherwise, pick the most recently active group
+    if (!target && groups && groups.length > 0) {
+      const sorted = [...groups].sort((a: any, b: any) => {
+        const ta = new Date(a?.lastMessage?.createdAt || a?.updatedAt || a?.createdAt || 0).getTime();
+        const tb = new Date(b?.lastMessage?.createdAt || b?.updatedAt || b?.createdAt || 0).getTime();
+        return tb - ta;
+      });
+      target = sorted[0];
+    }
+
+     if (target) {
+      const chatGroup: ChatGroup = {
+        id: (target as any)._id || (target as any).id,
+        _id: (target as any)._id || (target as any).id,
+        name: (target as any).name,
+        description: (target as any).description,
+        avatar: (target as any).groupImage || (target as any).avatar,
+        members: (target as any).participants || (target as any).members || [],
+      };
+      handleGroupSelect(chatGroup);
+    }
+  }, [chatType, groups, selectedGroup]);
+
+
+ // Auto-open the most recent/last-opened direct chat when switching to direct tab
+  useEffect(() => {
+    if (chatType !== "direct" || selectedUser) return;
+
+    const lastUserId = localStorage.getItem("lastSelectedUserId");
+
+    let userToOpen = lastUserId
+      ? chatusers.find((u: any) => u?.id === lastUserId)
+      : undefined;
+
+    if (!userToOpen && Array.isArray(chatusers) && chatusers.length > 0) {
+      const sorted = [...chatusers].sort((a: any, b: any) => {
+        const ta = new Date(a?.time || 0).getTime();
+        const tb = new Date(b?.time || 0).getTime();
+        return tb - ta;
+      });
+      userToOpen = sorted[0];
+    }
+
+    if (userToOpen) {
+      dispatch(setSelectedUser(userToOpen as any));
+      dispatch(setActiveView("chat"));
+      dispatch(setChatAreaActiveTab("chat"));
+      localStorage.setItem("lastSelectedUserId", userToOpen.id);
+    }
+  }, [chatType, selectedUser, chatusers, dispatch]);
 
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
@@ -322,50 +398,6 @@ const isValidObjectId = (id: string): boolean => {
 
   const handleBackToChat = () => {
     dispatch(backToChat());
-  };
-
-  // Call handling functions
-  const handleAcceptCall = async () => {
-    try {
-      await acceptCall();
-    } catch (error) {
-      console.error('Failed to accept call:', error);
-    }
-  };
-
-  const handleRejectCall = () => {
-    if (incomingCall) {
-      // Reject the call
-      console.log('❌ Call rejected');
-    }
-  };
-
-  const handleEndCall = () => {
-    endCall();
-  };
-
-  const handleToggleMic = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMicOn(audioTrack.enabled);
-      }
-    }
-  };
-
-  const handleToggleVideo = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOn(videoTrack.enabled);
-      }
-    }
-  };
-
-  const handleToggleSpeaker = () => {
-    setIsSpeakerOn(!isSpeakerOn);
   };
 
   const bgColor = isDark ? "bg-gray-900" : "bg-gray-100";
@@ -586,62 +618,15 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
-       <CallModal
-          open={!!incomingCall || isInCall || isCalling}
-          onClose={() => {}}
-          incomingCall={incomingCall}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          isIncoming={!!incomingCall}
-          isInCall={isInCall}
-          isCalling={isCalling}
-          onAccept={handleAcceptCall}
-          onReject={handleRejectCall}
-          onEndCall={handleEndCall}
-          onToggleMic={handleToggleMic}
-          onToggleVideo={handleToggleVideo}
-          onToggleSpeaker={handleToggleSpeaker}
-          isMicOn={isMicOn}
-          isVideoOn={isVideoOn}
-          isSpeakerOn={isSpeakerOn}
-          callerName={incomingCall?.callerName || selectedUser?.name || 'Unknown'}
-          callerAvatar={selectedUser?.profilePicture || selectedUser?.avatar}
+        <VideoCallModal
+          open={videoCallModalOpen}
+          onClose={() => setVideoCallModalOpen(false)}
+          contact={{
+            name: "Josephin water",
+            location: "AMERICA, CALIFORNIA",
+            avatar: "/placeholder.svg?height=50&width=50",
+          }}
         />
-
-        {/* Call Modal for Incoming Calls */}
-        <CallModal
-          open={!!incomingCall || isInCall || isCalling}
-          onClose={() => {}}
-          incomingCall={incomingCall}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          isIncoming={!!incomingCall}
-          isInCall={isInCall}
-          isCalling={isCalling}
-          onAccept={handleAcceptCall}
-          onReject={handleRejectCall}
-          onEndCall={handleEndCall}
-          onToggleMic={handleToggleMic}
-          onToggleVideo={handleToggleVideo}
-          onToggleSpeaker={handleToggleSpeaker}
-          isMicOn={isMicOn}
-          isVideoOn={isVideoOn}
-          isSpeakerOn={isSpeakerOn}
-          callerName={incomingCall?.callerName || selectedUser?.name || 'Unknown'}
-          callerAvatar={selectedUser?.profilePicture || selectedUser?.avatar}
-        />
-        
-        {/* Debug Call Modal State */}
-        {process.env.NODE_ENV === 'development' && (
-          <div style={{ position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', borderRadius: '5px', zIndex: 9999 }}>
-            <div>CallModal Open: {!!incomingCall || isInCall || isCalling ? 'YES' : 'NO'}</div>
-            <div>Incoming Call: {incomingCall ? 'YES' : 'NO'}</div>
-            <div>Is Calling: {isCalling ? 'YES' : 'NO'}</div>
-            <div>Is In Call: {isInCall ? 'YES' : 'NO'}</div>
-            <div>Current User: {currentUserId}</div>
-          </div>
-        )}
-
       </div>
     </>
   );
