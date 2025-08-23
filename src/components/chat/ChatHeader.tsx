@@ -200,7 +200,9 @@ export default function ChatHeader({
       
       // Pass the stream directly to callUser
       await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
+      
+      // Don't open modal immediately - wait for call state
+      console.log('📞 Call initiated, waiting for response...');
     } catch (error: any) {
       console.error('Failed to initiate voice call:', error);
       
