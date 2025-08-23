@@ -33,6 +33,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<any>(null);
+  const endCallRef = useRef<() => void>(() => {});
 
   // Initialize WebRTC peer connection
   const createPeerConnection = useCallback((stream?: MediaStream) => {
@@ -234,6 +235,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     });
   }, [localStream, remoteStream, incomingCall, currentUserId]);
 
+  // Keep a stable reference to endCall for cleanup and event handlers
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
+
   // Setup socket listeners
   useEffect(() => {
     if (!currentUserId) return;
@@ -244,16 +250,16 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     socketRef.current = socket;
 
     // Listen for incoming calls
-    socket.on('incoming-call', (data: any) => {
+    const handleIncoming = (data: any) => {
       setIncomingCall({
         from: data.from,
         type: data.type,
         offer: data.offer,
       });
-    });
+    };
 
     // Listen for call accepted
-    socket.on('call-accepted', async (data: any) => {
+    const handleAccepted = async (data: any) => {
       if (peerConnectionRef.current) {
         try {
           await peerConnectionRef.current.setRemoteDescription(data.answer);
@@ -263,15 +269,15 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           console.error('Error setting remote description:', error);
         }
       }
-    });
+    };
 
     // Listen for call ended
-    socket.on('call-ended', () => {
-      endCall();
-    });
+    const handleEnded = () => {
+      endCallRef.current?.();
+    };
 
     // Listen for ICE candidates
-    socket.on('ice-candidate', async (data: any) => {
+    const handleIce = async (data: any) => {
       if (peerConnectionRef.current) {
         try {
           await peerConnectionRef.current.addIceCandidate(data.candidate);
@@ -279,22 +285,27 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           console.error('Error adding ICE candidate:', error);
         }
       }
-    });
+    };
+
+    socket.on('incoming-call', handleIncoming);
+    socket.on('call-accepted', handleAccepted);
+    socket.on('call-ended', handleEnded);
+    socket.on('ice-candidate', handleIce);
 
     return () => {
-      socket.off('incoming-call');
-      socket.off('call-accepted');
-      socket.off('call-ended');
-      socket.off('ice-candidate');
+      socket.off('incoming-call', handleIncoming);
+      socket.off('call-accepted', handleAccepted);
+      socket.off('call-ended', handleEnded);
+      socket.off('ice-candidate', handleIce);
     };
-  }, [currentUserId, endCall]);
+  }, [currentUserId]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      endCall();
+      endCallRef.current?.();
     };
-  }, [endCall]);
+  }, []);
 
   return {
     localStream,
