@@ -9,7 +9,6 @@ import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
 import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
 import type { RootState } from '@/lib/store/index';
-import { useCallSocket } from "@/hooks/useCallSocket";
 import {
   setActiveView,
   setChatAreaActiveTab,
@@ -104,17 +103,7 @@ export default function HomePage() {
   } = useGroupChat(currentGroupId, currentUserId);
 
     // Initialize call socket hook
-  const {
-    localStream,
-    remoteStream,
-    incomingCall,
-    isCalling,
-    isInCall,
-    callUser,
-    acceptCall,
-    endCall,
-    initLocalStream,
-  } = useCallSocket({ currentUserId });
+  // Call handling is owned by ChatHeader via useCallSocket
 
   
 
