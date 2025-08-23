@@ -1,4 +1,4 @@
-// chat.gateway.ts - UPDATED VERSION WITH VIDEO/AUDIO CALL SUPPORT
+// chat.gateway.ts - FIXED VERSION WITH COMPLETE CALL SUPPORT
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -175,6 +175,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           type,
           offer
         });
+        this.logger.log(`📡 Emitting incoming-call to ${to}`);
       } else {
         this.logger.log(`❌ User ${to} not found for call`);
         client.emit('call-failed', { message: 'User not available' });
