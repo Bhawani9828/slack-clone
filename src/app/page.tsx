@@ -468,8 +468,10 @@ const isValidObjectId = (id: string): boolean => {
                           senderId={currentUserId}
                           currentUserId={currentUserId}
                           currentUserName={currentUserName}
-                          onVideoCall={() => handleVideoCall(selectedUser.id, selectedUser.name)}
-                          onVoiceCall={() => handleVoiceCall(selectedUser.id, selectedUser.name)}
+                          onVideoCall={() => handleVideoCall(selectedUser!.id, selectedUser!.name)}
+                          onVoiceCall={() => handleVoiceCall(selectedUser!.id, selectedUser!.name)}
+                          onVideoCall={() => {}}
+                          onVoiceCall={() => {}}
                           isDark={isDark}
                         />
                       )
