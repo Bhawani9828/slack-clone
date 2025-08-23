@@ -493,6 +493,7 @@ const getSenderDisplayName = (senderId: string | { _id: string; name?: string; u
       {/* ✅ Enhanced ChatHeader for groups */}
       <ChatHeader
         contact={chatHeaderContact}
+        currentUserId={currentUserId}
         onVideoCall={onVideoCall}
         onVoiceCall={onVoiceCall}
         isTyping={isGroupChat ? currentTypingUsers.length > 0 : typingStatus[receiverId]}

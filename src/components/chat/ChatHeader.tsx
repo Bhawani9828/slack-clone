@@ -44,6 +44,7 @@ interface ChatHeaderProps {
     isTyping?: boolean;
     userId?: string;
   };
+  currentUserId: string;
   onVideoCall?: () => void;
   onVoiceCall?: () => void;
   isTyping?: boolean;
@@ -62,6 +63,7 @@ interface ChatHeaderProps {
 
 export default function ChatHeader({
   contact,
+  currentUserId,
   onVideoCall,
   onVoiceCall,
   isTyping,
@@ -83,9 +85,6 @@ export default function ChatHeader({
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   
-  // Get current user ID from contact or context (you may need to adjust this)
-  const currentUserId = "current-user-id"; // Replace with actual current user ID
-  
   const {
     localStream,
     remoteStream,
@@ -94,6 +93,7 @@ export default function ChatHeader({
     isInCall,
     callUser,
     acceptCall,
+    rejectCall,
     endCall,
     initLocalStream,
   } = useCallSocket({ currentUserId });
@@ -183,6 +183,7 @@ export default function ChatHeader({
   const handleRejectCall = () => {
     if (incomingCall) {
       // Reject the call
+      rejectCall();
       setIsCallModalOpen(false);
     }
   };
