@@ -1,4 +1,4 @@
-// socket.service.ts - Fixed Version
+// socket.service.ts - Fixed Version with Complete Call Support
 import { io, Socket } from 'socket.io-client';
 import Cookies from 'js-cookie';
 
@@ -19,7 +19,91 @@ class SocketService {
     this.currentUserId = userId;
   }
 
-    setupMessageListeners(callbacks: {
+  // ==================== CALL-RELATED METHODS ====================
+  
+  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
+    if (!this.socket) {
+      console.error('Socket not connected for call');
+      return false;
+    }
+    
+    console.log('📞 Emitting call-user event:', data);
+    this.socket.emit('call-user', data);
+    return true;
+  }
+
+  acceptCall(data: { to: string; from: string; answer: any }) {
+    if (!this.socket) {
+      console.error('Socket not connected for call acceptance');
+      return false;
+    }
+    
+    console.log('✅ Emitting call-accepted event:', data);
+    this.socket.emit('call-accepted', data);
+    return true;
+  }
+
+  endCall(data: { to: string; from: string }) {
+    if (!this.socket) {
+      console.error('Socket not connected for call ending');
+      return false;
+    }
+    
+    console.log('📞 Emitting end-call event:', data);
+    this.socket.emit('end-call', data);
+    return true;
+  }
+
+  sendIceCandidate(data: { to: string; candidate: any }) {
+    if (!this.socket) {
+      console.error('Socket not connected for ICE candidate');
+      return false;
+    }
+    
+    console.log('🧊 Emitting ice-candidate event:', data);
+    this.socket.emit('ice-candidate', data);
+    return true;
+  }
+
+  // Call event listeners
+  onIncomingCall(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('incoming-call', callback);
+  }
+
+  onCallAccepted(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('call-accepted', callback);
+  }
+
+  onCallEnded(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('call-ended', callback);
+  }
+
+  onCallRejected(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('call-rejected', callback);
+  }
+
+  onIceCandidate(callback: (data: any) => void) {
+    if (!this.socket) return;
+    this.socket.on('ice-candidate', callback);
+  }
+
+  // Remove call listeners
+  offCallListeners() {
+    if (!this.socket) return;
+    this.socket.off('incoming-call');
+    this.socket.off('call-accepted');
+    this.socket.off('call-ended');
+    this.socket.off('call-rejected');
+    this.socket.off('ice-candidate');
+  }
+
+  // ==================== MESSAGE METHODS ====================
+
+  setupMessageListeners(callbacks: {
     onMessage: (msg: any) => void;
     onTyping: (data: any) => void;
     onUserStatus: (data: any) => void;
@@ -38,7 +122,7 @@ class SocketService {
     this.socket.off('userOnline');
     this.socket.off('userOffline');
     this.socket.off('lastMessage');
-      this.socket.off('messageDeleted');
+    this.socket.off('messageDeleted');
     this.socket.off('messageRead');
     this.socket.off('favoriteToggled');
     this.socket.off('messageForwarded');
@@ -50,7 +134,8 @@ class SocketService {
     this.socket.on('userOnline', (userId) => callbacks.onUserStatus({ userId, isOnline: true }));
     this.socket.on('userOffline', (userId) => callbacks.onUserStatus({ userId, isOnline: false }));
     this.socket.on('lastMessage', callbacks.onLastMessage);
-      // Message action listeners
+    
+    // Message action listeners
     if (callbacks.onMessageDeleted) {
       this.socket.on('messageDeleted', callbacks.onMessageDeleted);
     }
@@ -99,96 +184,90 @@ class SocketService {
     if (this.socket) {
       this.socket.removeAllListeners();
       this.socket.disconnect();
+      this.socket = null;
     }
 
-    console.log('Creating new socket connection...');
-    this.socket = io(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
-      auth: {
-        token: `Bearer ${token}`,
-        userId: this.currentUserId, // Add userId to auth
-      },
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: this.maxReconnectionAttempts,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'], // Add polling as fallback
-      forceNew: true, // Force new connection
-      timeout: 10000, // Add connection timeout
-    });
+    try {
+      console.log('🔌 Connecting to socket server...');
+      
+      // Connect to your NestJS backend
+      this.socket = io('http://localhost:3001/chat', {
+        auth: {
+          token: token
+        },
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+      });
 
-    this.setupSocketEventHandlers();
-    this.isConnecting = false;
+      this.socket.on('connect', () => {
+        console.log('✅ Socket connected successfully:', this.socket?.id);
+        this.isConnecting = false;
+        this.reconnectionAttempts = 0;
+        
+        // Auto-join user room
+        if (this.currentUserId) {
+          this.socket?.emit('joinUserRoom', { userId: this.currentUserId });
+        }
+      });
 
-    return this.socket;
+      this.socket.on('disconnect', (reason) => {
+        console.log('❌ Socket disconnected:', reason);
+        this.isConnecting = false;
+        
+        if (reason === 'io server disconnect') {
+          // Server disconnected us, try to reconnect
+          this.reconnect();
+        }
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('🚨 Socket connection error:', error);
+        this.isConnecting = false;
+        
+        if (this.reconnectionAttempts < this.maxReconnectionAttempts) {
+          this.reconnect();
+        } else {
+          console.error('Max reconnection attempts reached');
+        }
+      });
+
+      this.socket.on('error', (error) => {
+        console.error('🚨 Socket error:', error);
+      });
+
+      // Setup basic event listeners
+      this.setupBasicListeners();
+
+    } catch (error) {
+      console.error('🚨 Error creating socket connection:', error);
+      this.isConnecting = false;
+    }
+
+    return this.socket as Socket;
   }
 
-  private setupSocketEventHandlers() {
+  private setupBasicListeners() {
     if (!this.socket) return;
 
-    // Debug all events (remove in production)
-    this.socket.onAny((event, ...args) => {
-      console.log(`📡 [Socket Event] ${event}:`, args);
+    this.socket.on('connectionSuccess', (data) => {
+      console.log('✅ Connection confirmed:', data);
     });
 
-    this.socket.on('connect', () => {
-      console.log('✅ Connected to chat namespace, Socket ID:', this.socket?.id);
-      this.reconnectionAttempts = 0;
-      
-      // Join user to their own room for receiving messages
-      if (this.currentUserId) {
-        this.socket?.emit('joinUserRoom', { userId: this.currentUserId });
-        console.log(`🏠 Joined user room: ${this.currentUserId}`);
-      }
-      
-      // Request current online users when connected
-      setTimeout(() => {
-        this.socket?.emit('getOnlineUsers');
-      }, 500);
+    this.socket.on('onlineUsers', (users) => {
+      console.log('👥 Online users received:', users);
     });
+  }
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('❌ Disconnected:', reason);
-
-      if (reason === 'io server disconnect') {
-        // Server initiated disconnect, reconnect manually
-        setTimeout(() => {
-          if (this.reconnectionAttempts < this.maxReconnectionAttempts) {
-            this.reconnectionAttempts++;
-            console.log(`🔄 Attempting reconnection ${this.reconnectionAttempts}/${this.maxReconnectionAttempts}`);
-            this.socket?.connect();
-          }
-        }, 1000);
-      }
-    });
-
-    this.socket.on('connect_error', (error) => {
-      console.error('🚨 Connection error:', error);
-      this.reconnectionAttempts++;
-      
-      if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
-        console.error('Max reconnection attempts reached');
-      }
-    });
-
-    this.socket.on('reconnect', () => {
-      console.log('🔄 Reconnected to server');
-      this.reconnectionAttempts = 0;
-      
-      // Re-join user room after reconnection
-      if (this.currentUserId) {
-        this.socket?.emit('joinUserRoom', { userId: this.currentUserId });
-      }
-    });
-
-    this.socket.on('reconnect_error', (error) => {
-      console.error('🚨 Reconnection error:', error);
-    });
-
-    // Add error handling
-    this.socket.on('error', (error) => {
-      console.error('🚨 Socket error:', error);
-    });
+  private reconnect() {
+    if (this.isConnecting) return;
+    
+    this.reconnectionAttempts++;
+    console.log(`🔄 Attempting reconnection ${this.reconnectionAttempts}/${this.maxReconnectionAttempts}`);
+    
+    setTimeout(() => {
+      this.connect();
+    }, 1000 * this.reconnectionAttempts);
   }
 
   disconnect() {
@@ -197,539 +276,143 @@ class SocketService {
       this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
-      this.reconnectionAttempts = 0;
       this.isConnecting = false;
     }
   }
 
+  // Get current socket instance
   getSocket(): Socket | null {
     return this.socket;
   }
 
+  // Check if socket is connected
   isConnected(): boolean {
-    return this.socket?.connected ?? false;
+    return this.socket?.connected || false;
   }
 
-joinChannel(chatId: string) {
-  if (this.socket && this.socket.connected) {
-    // Leave any previous room to avoid duplicate messages
-    if (this.currentChatId && this.currentChatId !== chatId) {
-      this.socket.emit('leaveChat', { chatId: this.currentChatId });
-      console.log(`🚪 Left chat: ${this.currentChatId}`);
+  // ==================== MESSAGE METHODS ====================
+
+  sendMessage(messageData: any) {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Socket not connected for sending message');
+      return false;
     }
 
-    // Join new chat
+    this.socket.emit('sendMessage', messageData);
+    return true;
+  }
+
+  joinChat(chatId: string) {
+    if (!this.socket || !this.socket.connected) {
+      console.error('Socket not connected for joining chat');
+      return false;
+    }
+
     this.currentChatId = chatId;
-    this.socket.emit('joinChat', {
-      userId: this.currentUserId,
-      chatId,
-    });
-    console.log(`🔗 Joined chat: ${chatId}`);
-  } else {
-    console.warn('Cannot join channel: socket not connected');
-  }
-}
-
-  sendMessage(message: any): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        console.error('Socket not connected when trying to send message');
-        reject('Socket not connected');
-        return;
-      }
-
-      console.log('📤 Sending message:', message);
-      
-      // Allow optional clientMessageId to pass through
-      const payload = { ...message };
-      this.socket.emit('sendMessage', payload, (response: any) => {
-        console.log('📤 Send message response:', response);
-        if (response?.error) {
-          console.error('Send message error:', response.error);
-          reject(response.error);
-        } else {
-          resolve();
-        }
-      });
-    });
+    this.socket.emit('joinChat', { chatId });
+    return true;
   }
 
-  sendTypingIndicator(receiverId: string, isTyping: boolean) {
-    if (this.socket && this.socket.connected) {
-      console.log(`💬 Sending typing indicator: receiverId=${receiverId}, isTyping=${isTyping}`);
-      this.socket.emit('typing', {
-        receiverId,
-        isTyping,
-      });
-    } else {
-      console.warn('Cannot send typing indicator: socket not connected');
+  leaveChat() {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
+
+    if (this.currentChatId) {
+      this.socket.emit('leaveChat', { chatId: this.currentChatId });
+      this.currentChatId = null;
+    }
+    return true;
   }
 
-  
+  sendTyping(receiverId: string, isTyping: boolean) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
+    }
+
+    this.socket.emit('typing', { receiverId, isTyping });
+    return true;
+  }
 
   markAsRead(messageId: string, senderId: string) {
-    if (this.socket && this.socket.connected) {
-      console.log(`👁️ Marking as read: messageId=${messageId}, senderId=${senderId}`);
-      this.socket.emit('markAsRead', {
-        messageId,
-        senderId,
-      });
-    } else {
-      console.warn('Cannot mark as read: socket not connected');
-    }
-  }
-
-
-  
-  // Message Action Methods (Socket-first with REST fallback)
-// Soft delete
-// Soft delete
-deleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!this.socket?.connected) {
-      return reject(new Error("Socket not connected"));
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
 
-    const onDeleted = (data: any) => {
-      if (data?.messageId === messageId) {
-        this.socket?.off("messageDeleted", onDeleted);
-        resolve();
-      }
-    };
+    this.socket.emit('markAsRead', { messageId, senderId });
+    return true;
+  }
 
-    this.socket.on("messageDeleted", onDeleted);
-
-    this.socket.emit("deleteMessage", {
-      messageId,
-      hard: false,
-      ...options,
-    });
-  });
-}
-
-// Hard delete
-hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!this.socket?.connected) {
-      return reject(new Error("Socket not connected"));
+  deleteMessage(messageId: string, hard?: boolean) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
 
-    const onDeleted = (data: any) => {
-      if (data?.messageId === messageId) {
-        this.socket?.off("messageDeleted", onDeleted);
-        resolve();
-      }
-    };
-
-    this.socket.on("messageDeleted", onDeleted);
-
-    this.socket.emit("deleteMessage", {
-      messageId,
-      hard: true,
-      ...options,
-    });
-  });
-}
-
-
-  async replyToMessage(data: {
-    originalMessageId: string;
-    receiverId: string;
-    content: string;
-    type?: string;
-  }): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        this.replyToMessageViaAPI(data).then(resolve).catch(reject);
-        return;
-      }
-
-      // Pass through optional clientMessageId if present
-      const payload = { ...data } as any;
-
-      this.socket.emit('replyMessage', payload, (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    this.socket.emit('deleteMessage', { messageId, hard });
+    return true;
   }
 
-  async forwardMessage(data: {
-    messageId: string;
-    receiverIds: string[];
-  }): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        this.forwardMessageViaAPI(data).then(resolve).catch(reject);
-        return;
-      }
-
-      // Pass through optional clientMessageId if present
-      const payload = { ...data } as any;
-
-      this.socket.emit('forwardMessage', payload, (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  async toggleFavorite(data: {
-    messageId: string;
-    isFavorite: boolean;
-  }): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        this.toggleFavoriteViaAPI(data).then(resolve).catch(reject);
-        return;
-      }
-
-      this.socket.emit('toggleFavorite', data, (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  async logCopyAction(messageId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        this.logCopyActionViaAPI(messageId).then(resolve).catch(reject);
-        return;
-      }
-
-      this.socket.emit('copyMessage', { messageId }, (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  async getFavoriteMessages(): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        this.getFavoriteMessagesViaAPI().then(resolve).catch(reject);
-        return;
-      }
-
-      this.socket.emit('getFavorites');
-      
-      const handleFavorites = (data: any) => {
-        this.socket?.off('favoriteMessages', handleFavorites);
-        resolve(data.messages || []);
-      };
-
-      this.socket.on('favoriteMessages', handleFavorites);
-
-      setTimeout(() => {
-        this.socket?.off('favoriteMessages', handleFavorites);
-        reject(new Error('Timeout getting favorite messages'));
-      }, 10000);
-    });
-  }
-
-  // REST API Fallback Methods
-  private async deleteMessageViaAPI(messageId: string, userId: string): Promise<void> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/${messageId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to delete message');
-    }
-  }
-private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promise<void> {
-  const token = Cookies.get('auth_token');
-  
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/messages/hard-delete/${messageId}`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ userId }),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error('Failed to delete message');
-  }
-}
-
-
-
-  private async replyToMessageViaAPI(data: any): Promise<any> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/reply`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to send reply');
+  replyMessage(data: { originalMessageId: string; receiverId: string; content: string; type?: string }) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
 
-    return response.json();
+    this.socket.emit('replyMessage', data);
+    return true;
   }
 
-  private async forwardMessageViaAPI(data: any): Promise<void> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/forward`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to forward message');
-    }
-  }
-
-  private async toggleFavoriteViaAPI(data: any): Promise<void> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/favorite`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to toggle favorite');
-    }
-  }
-
-  private async logCopyActionViaAPI(messageId: string): Promise<void> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/copy`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ messageId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to log copy');
-    }
-  }
-
-  private async getFavoriteMessagesViaAPI(): Promise<any[]> {
-    const token = Cookies.get('auth_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/messages/favorites`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch favorite messages');
+  forwardMessage(data: { messageId: string; receiverIds: string[] }) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
 
-    const data = await response.json();
-    return data.messages || [];
+    this.socket.emit('forwardMessage', data);
+    return true;
   }
 
-  //  getSocket(): Socket | null {
-  //   return this.socket;
-  // }
-
-  // Request online users list
-  requestOnlineUsers() {
-    if (this.socket && this.socket.connected) {
-      console.log('👥 Requesting online users...');
-      this.socket.emit('getOnlineUsers');
+  toggleFavorite(messageId: string, isFavorite: boolean) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
+
+    this.socket.emit('toggleFavorite', { messageId, isFavorite });
+    return true;
   }
 
-  // Event listeners with better error handling
-  removeAllListeners() {
-    this.socket?.removeAllListeners();
-  }
-
-  onMessageReceived(callback: (message: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('receiveMessage'); // Remove existing listeners first
-    this.socket.on('receiveMessage', (message) => {
-      console.log('📥 Message received via socket:', message);
-      callback(message);
-    });
-  }
-
-  onMessageDelivered(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('messageDelivered');
-    this.socket.on('messageDelivered', callback);
-  }
-
-  onMessageRead(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('messageRead');
-    this.socket.on('messageRead', callback);
-  }
-
-  onUserOnline(callback: (userId: string) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('userOnline');
-    this.socket.on('userOnline', callback);
-  }
-
-  onUserOffline(callback: (userId: string) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('userOffline');
-    this.socket.on('userOffline', callback);
-  }
-
-  onOnlineUsers(callback: (userIds: string[]) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('onlineUsers');
-    this.socket.on('onlineUsers', callback);
-  }
-
-  onUserTyping(callback: (data: { userId: string; receiverId: string; isTyping: boolean }) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('typing');
-    this.socket.on('typing', callback);
-  }
-
-  onLastMessageUpdate(callback: (data: { chatId: string; lastMessage: string }) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('lastMessage');
-    this.socket.on('lastMessage', callback);
-  }
-
-  // Remove specific listeners
-  offMessageReceived(callback?: (message: any) => void) {
-    this.socket?.off('receiveMessage', callback);
-  }
-
-  offMessageDelivered(callback?: (data: any) => void) {
-    this.socket?.off('messageDelivered', callback);
-  }
-
-  offMessageRead(callback?: (data: any) => void) {
-    this.socket?.off('messageRead', callback);
-  }
-
-  offUserOnline(callback?: (userId: string) => void) {
-    this.socket?.off('userOnline', callback);
-  }
-
-  offUserOffline(callback?: (userId: string) => void) {
-    this.socket?.off('userOffline', callback);
-  }
-
-  offOnlineUsers(callback?: (userIds: string[]) => void) {
-    this.socket?.off('onlineUsers', callback);
-  }
-
-  offUserTyping(callback?: (data: { userId: string; receiverId: string; isTyping: boolean }) => void) {
-    this.socket?.off('typing', callback);
-  }
-
-  // Call-related methods
-  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
-    if (this.socket && this.socket.connected) {
-      console.log('📞 Initiating call:', data);
-      this.socket.emit('call-user', data);
-    } else {
-      console.warn('Cannot initiate call: socket not connected');
+  copyMessage(messageId: string) {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
+
+    this.socket.emit('copyMessage', { messageId });
+    return true;
   }
 
-  acceptCall(data: { to: string; from: string; answer: any }) {
-    if (this.socket && this.socket.connected) {
-      console.log('✅ Accepting call:', data);
-      this.socket.emit('call-accepted', data);
-    } else {
-      console.warn('Cannot accept call: socket not connected');
+  getFavorites() {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
+
+    this.socket.emit('getFavorites');
+    return true;
   }
 
-  endCall(data: { to: string; from: string }) {
-    if (this.socket && this.socket.connected) {
-      console.log('❌ Ending call:', data);
-      this.socket.emit('end-call', data);
-    } else {
-      console.warn('Cannot end call: socket not connected');
+  getMessageStats() {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
+
+    this.socket.emit('getMessageStats');
+    return true;
   }
 
-  sendIceCandidate(data: { to: string; candidate: any }) {
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('ice-candidate', data);
-    } else {
-      console.warn('Cannot send ICE candidate: socket not connected');
+  getOnlineUsers() {
+    if (!this.socket || !this.socket.connected) {
+      return false;
     }
-  }
 
-  // Call event listeners
-  onIncomingCall(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('incoming-call');
-    this.socket.on('incoming-call', callback);
-  }
-
-  onCallAccepted(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('call-accepted');
-    this.socket.on('call-accepted', callback);
-  }
-
-  onCallEnded(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('call-ended');
-    this.socket.on('call-ended', callback);
-  }
-
-  onIceCandidate(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('ice-candidate');
-    this.socket.on('ice-candidate', callback);
+    this.socket.emit('getOnlineUsers');
+    return true;
   }
 }
 

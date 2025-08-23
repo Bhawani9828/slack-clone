@@ -67,10 +67,25 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('🧊 ICE candidate generated');
-        socketRef.current?.emit('ice-candidate', {
-          to: incomingCall?.from || '',
-          candidate: event.candidate,
-        });
+        const targetUserId = incomingCall?.from || '';
+        if (targetUserId) {
+          socketService.sendIceCandidate({
+            to: targetUserId,
+            candidate: event.candidate,
+          });
+        }
+      }
+    };
+
+    // Handle connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log('🔗 Connection state changed:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        console.log('✅ WebRTC connection established');
+      } else if (pc.connectionState === 'failed') {
+        console.error('❌ WebRTC connection failed');
+        setIsInCall(false);
+        setIsCalling(false);
       }
     };
 
@@ -103,198 +118,275 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           readyState: track.readyState
         }))
       });
-      
-      // Set the stream in state
+
       setLocalStream(stream);
-      console.log('📹 Stream state updated');
-      
-      // Wait a bit to ensure state is updated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      console.log('📹 Local stream set in state, returning stream');
       return stream;
     } catch (error: any) {
-      console.error('❌ Error accessing media devices:', error);
+      console.error('❌ Failed to get media stream:', error);
       
-      // Provide specific error messages
-      let errorMessage = 'Failed to access media devices';
+      let errorMessage = 'Failed to access camera/microphone';
       
       if (error.name === 'NotAllowedError') {
-        errorMessage = 'Camera/microphone permission denied. Please allow access in your browser settings.';
+        errorMessage = 'Camera/microphone access denied. Please grant permissions and try again.';
       } else if (error.name === 'NotFoundError') {
-        errorMessage = 'No camera or microphone found. Please connect the required devices.';
-      } else if (error.name === 'NotSupportedError') {
-        errorMessage = 'Camera/microphone not supported in this browser.';
+        errorMessage = 'No camera or microphone found. Please check your devices.';
       } else if (error.name === 'NotReadableError') {
         errorMessage = 'Camera/microphone is already in use by another application.';
       } else if (error.name === 'OverconstrainedError') {
-        errorMessage = 'Camera/microphone constraints not satisfied.';
-      } else if (error.message) {
-        errorMessage = error.message;
+        errorMessage = 'Camera/microphone constraints not supported.';
+      } else if (error.name === 'TypeError') {
+        errorMessage = 'Invalid media constraints provided.';
       }
       
-      const enhancedError = new Error(errorMessage);
-      enhancedError.name = error.name;
-      throw enhancedError;
+      throw new Error(errorMessage);
     }
   }, []);
 
   // Call a user
   const callUser = useCallback(async (userId: string, stream?: MediaStream) => {
-    console.log('📞 callUser called with userId:', userId);
-    console.log('📹 Current localStream:', localStream);
-    console.log('📹 Passed stream:', stream);
-    
-    // Use the passed stream if available, otherwise use the state
-    const streamToUse = stream || localStream;
-    
-    if (!streamToUse) {
-      throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
-    }
-
-    setIsCalling(true);
-    console.log('🔗 Creating peer connection...');
-    const pc = createPeerConnection(streamToUse);
-
     try {
-      console.log('📤 Creating offer...');
+      console.log('📞 Calling user:', userId);
+      
+      const streamToUse = stream || localStream;
+      if (!streamToUse) {
+        throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
+      }
+
+      // Create peer connection
+      const pc = createPeerConnection(streamToUse);
+      
+      // Create offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      const callData = {
+      
+      console.log('📤 Offer created:', offer);
+      
+      // Send call request via socket
+      const success = socketService.callUser({
         to: userId,
         from: currentUserId,
-        offer,
-        type: streamToUse.getVideoTracks().length > 0 ? 'video' : 'audio',
-      };
+        offer: offer,
+        type: streamToUse.getVideoTracks().length > 0 ? 'video' : 'audio'
+      });
+
+      if (!success) {
+        throw new Error('Failed to send call request');
+      }
+
+      setIsCalling(true);
+      console.log('📞 Call request sent successfully');
       
-      console.log('📡 Emitting call-user event:', callData);
-      socketRef.current?.emit('call-user', callData);
-      
-      console.log('✅ Call initiated successfully');
     } catch (error) {
-      console.error('❌ Error creating offer:', error);
-      setIsCalling(false);
+      console.error('❌ Failed to call user:', error);
       throw error;
     }
-  }, [localStream, createPeerConnection, currentUserId]);
+  }, [currentUserId, localStream, createPeerConnection]);
 
   // Accept incoming call
   const acceptCall = useCallback(async () => {
-    if (!incomingCall || !localStream) return;
-
-    setIsInCall(true);
-    setIncomingCall(null);
-    
-    const pc = createPeerConnection();
-    
     try {
-      await pc.setRemoteDescription(incomingCall.offer);
+      if (!incomingCall || !localStream) {
+        throw new Error('No incoming call or local stream available');
+      }
+
+      console.log('✅ Accepting incoming call from:', incomingCall.from);
+      
+      // Create peer connection
+      const pc = createPeerConnection(localStream);
+      
+      // Set remote description from offer
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      
+      // Create answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-
-      socketRef.current?.emit('call-accepted', {
+      
+      console.log('📤 Answer created:', answer);
+      
+      // Send acceptance via socket
+      const success = socketService.acceptCall({
         to: incomingCall.from,
         from: currentUserId,
-        answer,
+        answer: answer
       });
+
+      if (!success) {
+        throw new Error('Failed to send call acceptance');
+      }
+
+      setIsInCall(true);
+      setIncomingCall(null);
+      console.log('✅ Call accepted successfully');
+      
     } catch (error) {
-      console.error('Error accepting call:', error);
-      setIsInCall(false);
+      console.error('❌ Failed to accept call:', error);
+      throw error;
     }
-  }, [incomingCall, localStream, createPeerConnection, currentUserId]);
+  }, [incomingCall, localStream, currentUserId, createPeerConnection]);
 
   // End call
   const endCall = useCallback(() => {
-    // Stop all tracks
+    try {
+      console.log('📞 Ending call...');
+      
+      // Close peer connection
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+
+      // Stop local stream tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+
+      // Reset state
+      setIsInCall(false);
+      setIsCalling(false);
+      setRemoteStream(null);
+      
+      // Notify other user via socket
+      if (incomingCall?.from) {
+        socketService.endCall({
+          to: incomingCall.from,
+          from: currentUserId
+        });
+      }
+      
+      console.log('✅ Call ended successfully');
+      
+    } catch (error) {
+      console.error('❌ Error ending call:', error);
+    }
+  }, [localStream, incomingCall, currentUserId]);
+
+  // Reject incoming call
+  const rejectCall = useCallback(() => {
+    try {
+      console.log('❌ Rejecting incoming call from:', incomingCall?.from);
+      
+      if (incomingCall?.from) {
+        socketService.getSocket()?.emit('call-rejected', {
+          to: incomingCall.from,
+          from: currentUserId
+        });
+      }
+      
+      setIncomingCall(null);
+      console.log('✅ Call rejected successfully');
+      
+    } catch (error) {
+      console.error('❌ Error rejecting call:', error);
+    }
+  }, [incomingCall, currentUserId]);
+
+  // Toggle microphone
+  const toggleMic = useCallback(() => {
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        console.log('🎤 Microphone:', audioTrack.enabled ? 'ON' : 'OFF');
+      }
     }
-    if (remoteStream) {
-      remoteStream.getTracks().forEach(track => track.stop());
+  }, [localStream]);
+
+  // Toggle video
+  const toggleVideo = useCallback(() => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        console.log('📹 Video:', videoTrack.enabled ? 'ON' : 'OFF');
+      }
     }
+  }, [localStream]);
 
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
+  // Toggle speaker
+  const toggleSpeaker = useCallback(() => {
+    // This is a placeholder - actual speaker toggle depends on device capabilities
+    console.log('🔊 Speaker toggle requested');
+  }, []);
 
-    // Reset state
-    setLocalStream(null);
-    setRemoteStream(null);
-    setIsCalling(false);
-    setIsInCall(false);
-    setIncomingCall(null);
-
-    // Notify other user
-    socketRef.current?.emit('end-call', {
-      to: incomingCall?.from || '',
-      from: currentUserId,
-    });
-  }, [localStream, remoteStream, incomingCall, currentUserId]);
-
-  // Setup socket listeners
+  // Setup socket event listeners
   useEffect(() => {
     if (!currentUserId) return;
 
-    const socket = socketService.getSocket();
-    if (!socket) return;
-
+    console.log('🧩 useCallSocket mounted - initializing socket for user:', currentUserId);
+    
+    // Connect to socket
+    const socket = socketService.connect(currentUserId);
     socketRef.current = socket;
 
-    // Listen for incoming calls
-    socket.on('incoming-call', (data: any) => {
-      setIncomingCall({
-        from: data.from,
-        type: data.type,
-        offer: data.offer,
-      });
+    // Setup call event listeners
+    socketService.onIncomingCall((data) => {
+      console.log('📞 Incoming call received:', data);
+      setIncomingCall(data);
     });
 
-    // Listen for call accepted
-    socket.on('call-accepted', async (data: any) => {
+    socketService.onCallAccepted((data) => {
+      console.log('✅ Call accepted by remote user:', data);
       if (peerConnectionRef.current) {
-        try {
-          await peerConnectionRef.current.setRemoteDescription(data.answer);
-          setIsCalling(false);
-          setIsInCall(true);
-        } catch (error) {
-          console.error('Error setting remote description:', error);
-        }
+        peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
       }
     });
 
-    // Listen for call ended
-    socket.on('call-ended', () => {
-      endCall();
-    });
-
-    // Listen for ICE candidates
-    socket.on('ice-candidate', async (data: any) => {
+    socketService.onCallEnded((data) => {
+      console.log('📞 Call ended by remote user:', data);
+      setIsInCall(false);
+      setIsCalling(false);
+      setRemoteStream(null);
+      
       if (peerConnectionRef.current) {
-        try {
-          await peerConnectionRef.current.addIceCandidate(data.candidate);
-        } catch (error) {
-          console.error('Error adding ICE candidate:', error);
-        }
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
     });
 
-    return () => {
-      socket.off('incoming-call');
-      socket.off('call-accepted');
-      socket.off('call-ended');
-      socket.off('ice-candidate');
-    };
-  }, [currentUserId, endCall]);
+    socketService.onCallRejected((data) => {
+      console.log('❌ Call rejected by remote user:', data);
+      setIsCalling(false);
+      
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+    });
 
-  // Cleanup on unmount
-  useEffect(() => {
+    socketService.onIceCandidate((data) => {
+      console.log('🧊 ICE candidate received:', data);
+      if (peerConnectionRef.current && data.candidate) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    });
+
+    // Cleanup function
     return () => {
-      endCall();
+      console.log('🧩 useCallSocket unmounting - cleaning up');
+      
+      // Remove call listeners
+      socketService.offCallListeners();
+      
+      // Close peer connection
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      
+      // Stop local stream
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      
+      // Reset state
+      setIsInCall(false);
+      setIsCalling(false);
+      setIncomingCall(null);
+      setRemoteStream(null);
     };
-  }, [endCall]);
+  }, [currentUserId, localStream]);
 
   return {
     localStream,
@@ -305,6 +397,10 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     callUser,
     acceptCall,
     endCall,
+    rejectCall,
     initLocalStream,
+    toggleMic,
+    toggleVideo,
+    toggleSpeaker,
   };
 };
