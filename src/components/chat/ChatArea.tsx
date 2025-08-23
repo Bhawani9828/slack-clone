@@ -495,6 +495,7 @@ const getSenderDisplayName = (senderId: string | { _id: string; name?: string; u
         contact={chatHeaderContact}
         onVideoCall={onVideoCall}
         onVoiceCall={onVoiceCall}
+         currentUserId={currentUserId}
         isTyping={isGroupChat ? currentTypingUsers.length > 0 : typingStatus[receiverId]}
         isGroupChat={isGroupChat}
         participantCount={participantCount}

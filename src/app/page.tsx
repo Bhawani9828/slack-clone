@@ -3,13 +3,13 @@ import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from 'react-redux';
 import ChatArea from "@/components/chat/ChatArea";
 import Sidebar from "@/components/layout/Sidebar";
-import VideoCallModal from "@/components/modals/VideoCallModal";
+
 import CallModal from "@/components/modals/CallModal";
 import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
 import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
 import type { RootState } from '@/lib/store/index';
-import { useCallSocket } from "@/hooks/useCallSocket";
+
 import {
   setActiveView,
   setChatAreaActiveTab,
@@ -103,18 +103,7 @@ export default function HomePage() {
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
 
-    // Initialize call socket hook
-  const {
-    localStream,
-    remoteStream,
-    incomingCall,
-    isCalling,
-    isInCall,
-    callUser,
-    acceptCall,
-    endCall,
-    initLocalStream,
-  } = useCallSocket({ currentUserId });
+  
 
   
 
@@ -618,15 +607,7 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
-        <VideoCallModal
-          open={videoCallModalOpen}
-          onClose={() => setVideoCallModalOpen(false)}
-          contact={{
-            name: "Josephin water",
-            location: "AMERICA, CALIFORNIA",
-            avatar: "/placeholder.svg?height=50&width=50",
-          }}
-        />
+      
       </div>
     </>
   );
