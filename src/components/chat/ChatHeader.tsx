@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type React from "react";
 import {
   Avatar,
@@ -19,8 +19,7 @@ import {
   Apps,
 } from "@mui/icons-material";
 import UserAvatar from "./UserAvatar";
-import { useCallSocket } from "@/hooks/useCallSocket";
-import CallModal from "../modals/CallModal";
+// Call handling is managed at page level via a global hook and modal
 
 interface Contact {
   userId: string;
@@ -45,8 +44,8 @@ interface ChatHeaderProps {
     userId?: string;
   };
   currentUserId: string;
-  onVideoCall?: () => void;
-  onVoiceCall?: () => void;
+  onVideoCall?: (userId: string, name?: string, avatarUrl?: string) => void;
+  onVoiceCall?: (userId: string, name?: string, avatarUrl?: string) => void;
   isTyping?: boolean;
   
   // ✅ Group chat specific props
@@ -81,151 +80,22 @@ export default function ChatHeader({
 
     // Call-related state
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  
-  const {
-    localStream,
-    remoteStream,
-    incomingCall,
-    isCalling,
-    isInCall,
-    callUser,
-    acceptCall,
-    rejectCall,
-    endCall,
-    initLocalStream,
-  } = useCallSocket({ currentUserId });
 
   
   // Call handling functions
   // Call handling functions
   const handleVideoCall = async () => {
-    try {
-      console.log('🎥 Starting video call...');
-      const stream = await initLocalStream({ video: true, audio: true });
-      
-      if (!stream) {
-        throw new Error('Failed to get media stream');
-      }
-      
-      console.log('✅ Media stream obtained, initiating call...');
-      console.log('📹 Stream details:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(track => ({
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState
-        }))
-      });
-         // Pass the stream directly to callUser
-      await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
-    } catch (error: any) {
-      console.error('Failed to initiate video call:', error);
-      
-      let errorMessage = 'Failed to start video call. ';
-      if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please check your camera and microphone permissions.';
-      }
-      
-      alert(errorMessage);
-    }
+    onVideoCall?.(contact.userId || '', contact.name, contact.profilePicture || contact.avatar);
   };
 
  const handleVoiceCall = async () => {
-    try {
-      console.log('🎤 Starting voice call...');
-      const stream = await initLocalStream({ video: false, audio: true });
-      
-      if (!stream) {
-        throw new Error('Failed to get media stream');
-      }
-      
-      console.log('✅ Media stream obtained, initiating call...');
-      console.log('🎤 Stream details:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(track => ({
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState
-        }))
-      });
-        // Pass the stream directly to callUser
-      await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
-    } catch (error: any) {
-      console.error('Failed to initiate voice call:', error);
-      
-      let errorMessage = 'Failed to start voice call. ';
-      if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please check your microphone permissions.';
-      }
-      
-      alert(errorMessage);
-    }
+    onVoiceCall?.(contact.userId || '', contact.name, contact.profilePicture || contact.avatar);
   };
 
- const handleAcceptCall = async () => {
-    try {
-      await acceptCall();
-      setIsCallModalOpen(true);
-    } catch (error) {
-      console.error('Failed to accept call:', error);
-    }
-  };
-
-  const handleRejectCall = () => {
-    if (incomingCall) {
-      // Reject the call
-      rejectCall();
-      setIsCallModalOpen(false);
-    }
-  };
-
-
-
-  const handleEndCall = () => {
-    endCall();
-    setIsCallModalOpen(false);
-  };
-
-    const handleToggleMic = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMicOn(audioTrack.enabled);
-      }
-    }
-  };
-
-  const handleToggleVideo = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOn(videoTrack.enabled);
-      }
-    }
-  };
-
-    const handleToggleSpeaker = () => {
-    setIsSpeakerOn(!isSpeakerOn);
-    // You can implement speaker toggle logic here
-  };
-
-  // Show call modal when there's an incoming call or when in a call
+  // Local state only, global modal is elsewhere
   useEffect(() => {
-    if (incomingCall || isInCall) {
-      setIsCallModalOpen(true);
-    }
-  }, [incomingCall, isInCall]);
+    setIsCallModalOpen(false);
+  }, [contact?.userId]);
 
   const handleLeaveGroup = async () => {
     if (onLeaveGroup && confirm("Are you sure you want to leave this group?")) {
@@ -360,27 +230,7 @@ export default function ChatHeader({
 </Menu>
 
       </div>
-        {/* Call Modal */}
-      <CallModal
-        open={isCallModalOpen}
-        onClose={() => setIsCallModalOpen(false)}
-        incomingCall={incomingCall}
-        localStream={localStream}
-        remoteStream={remoteStream}
-        isIncoming={!!incomingCall}
-        isInCall={isInCall}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-        onEndCall={handleEndCall}
-        onToggleMic={handleToggleMic}
-        onToggleVideo={handleToggleVideo}
-        onToggleSpeaker={handleToggleSpeaker}
-        isMicOn={isMicOn}
-        isVideoOn={isVideoOn}
-        isSpeakerOn={isSpeakerOn}
-        callerName={contact.name}
-        callerAvatar={contact.profilePicture || contact.avatar}
-      />
+        {/* Global CallModal is rendered at page level */}
     </div>
   );
 }

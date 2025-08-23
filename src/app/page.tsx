@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from 'react-redux';
 import ChatArea from "@/components/chat/ChatArea";
 import Sidebar from "@/components/layout/Sidebar";
-import VideoCallModal from "@/components/modals/VideoCallModal";
 import CallModal from "@/components/modals/CallModal";
 import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
@@ -22,6 +21,7 @@ import {
 } from '@/lib/store/slices/sidebarSlice';
 import LeftNavigation from "@/components/layout/LeftNavigation";
 import { ChatGroup } from "@/types/chatTypes";
+import { useCallSocket } from "@/hooks/useCallSocket";
 
 interface ChatUser {
   id: string;
@@ -59,7 +59,7 @@ export default function HomePage() {
   const [currentUserName, setCurrentUserName] = useState<string>("");
  const chatusers = useSelector((state: RootState) => state.user.chatusers);
 
- // Call-related state
+ // Call-related state (global modal controls)
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
@@ -103,7 +103,19 @@ export default function HomePage() {
   } = useGroupChat(currentGroupId, currentUserId);
 
     // Initialize call socket hook
-  // Call handling is owned by ChatHeader via useCallSocket
+  // ✅ Global call hook (single instance for app)
+  const {
+    localStream,
+    remoteStream,
+    incomingCall,
+    isCalling,
+    isInCall,
+    callUser,
+    acceptCall,
+    rejectCall,
+    endCall,
+    initLocalStream,
+  } = useCallSocket({ currentUserId });
 
   
 
@@ -377,12 +389,22 @@ const isValidObjectId = (id: string): boolean => {
     }
   };
 
-  const handleVideoCall = () => {
-    setVideoCallModalOpen(true);
+  const handleVideoCall = async (userId: string, name?: string, avatar?: string) => {
+    try {
+      const stream = await initLocalStream({ video: true, audio: true });
+      await callUser(userId, stream, name);
+    } catch (e) {
+      console.error('Failed to start video call', e);
+    }
   };
 
-  const handleVoiceCall = () => {
-    console.log("Starting voice call...");
+  const handleVoiceCall = async (userId: string, name?: string, avatar?: string) => {
+    try {
+      const stream = await initLocalStream({ video: false, audio: true });
+      await callUser(userId, stream, name);
+    } catch (e) {
+      console.error('Failed to start voice call', e);
+    }
   };
 
   const handleBackToChat = () => {
@@ -607,14 +629,36 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
-        <VideoCallModal
-          open={videoCallModalOpen}
-          onClose={() => setVideoCallModalOpen(false)}
-          contact={{
-            name: "Josephin water",
-            location: "AMERICA, CALIFORNIA",
-            avatar: "/placeholder.svg?height=50&width=50",
+        {/* Global Call Modal */}
+        <CallModal
+          open={!!incomingCall || isInCall}
+          onClose={() => endCall()}
+          incomingCall={incomingCall}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isIncoming={!!incomingCall}
+          isInCall={isInCall}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+          onEndCall={endCall}
+          onToggleMic={() => {
+            if (localStream) {
+              const t = localStream.getAudioTracks()[0];
+              if (t) { t.enabled = !t.enabled; setIsMicOn(t.enabled); }
+            }
           }}
+          onToggleVideo={() => {
+            if (localStream) {
+              const t = localStream.getVideoTracks()[0];
+              if (t) { t.enabled = !t.enabled; setIsVideoOn(t.enabled); }
+            }
+          }}
+          onToggleSpeaker={() => setIsSpeakerOn(!isSpeakerOn)}
+          isMicOn={isMicOn}
+          isVideoOn={isVideoOn}
+          isSpeakerOn={isSpeakerOn}
+          callerName={selectedUser?.name || 'Unknown'}
+          callerAvatar={selectedUser?.profilePicture || selectedUser?.avatar}
         />
       </div>
     </>
