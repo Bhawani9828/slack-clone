@@ -3,13 +3,11 @@ import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from 'react-redux';
 import ChatArea from "@/components/chat/ChatArea";
 import Sidebar from "@/components/layout/Sidebar";
-
 import CallModal from "@/components/modals/CallModal";
 import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
-import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
+import { useGroupChat } from "@/hooks/useGroupChat";
 import type { RootState } from '@/lib/store/index';
-
 import {
   setActiveView,
   setChatAreaActiveTab,
@@ -23,6 +21,7 @@ import {
 } from '@/lib/store/slices/sidebarSlice';
 import LeftNavigation from "@/components/layout/LeftNavigation";
 import { ChatGroup } from "@/types/chatTypes";
+import { useCallSocket } from "@/hooks/useCallSocket";
 
 interface ChatUser {
   id: string;
@@ -42,7 +41,6 @@ interface ChatUser {
 export default function HomePage() {
   const dispatch = useDispatch();
   
-  // Get state from Redux
   const {
     activeView: sidebarView,
     chatAreaActiveTab,
@@ -52,24 +50,21 @@ export default function HomePage() {
     chatType,       
   } = useSelector((state: RootState) => state.sidebar);
 
-  // Local state for non-Redux managed state
   const [isDark, setIsDark] = useState(false);
-  const [videoCallModalOpen, setVideoCallModalOpen] = useState(false);
   const [initialSelectedUserId, setInitialSelectedUserId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserName, setCurrentUserName] = useState<string>("");
- const chatusers = useSelector((state: RootState) => state.user.chatusers);
+  const chatusers = useSelector((state: RootState) => state.user.chatusers);
+  const [callError, setCallError] = useState<string | null>(null);
 
- // Call-related state
+  // Call-related UI toggles (for CallModal)
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  // Get current group ID for the hook
+const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
   const currentGroupId = selectedGroup?.id || "";
 
-  // ✅ Initialize group chat hook
   const {
-    // State
     messages: groupMessages,
     groupInfo,
     groups,
@@ -79,8 +74,6 @@ export default function HomePage() {
     connectionError: groupConnectionError,
     isLoadingMessages,
     hasMoreMessages,
-    
-    // Functions
     sendGroupMessage,
     loadMoreMessages,
     deleteMessage,
@@ -94,8 +87,6 @@ export default function HomePage() {
     addParticipants,
     removeParticipant,
     changeAdminStatus,
-    
-    // Computed values
     isCurrentUserAdmin,
     canManageGroup,
     participantCount,
@@ -103,9 +94,26 @@ export default function HomePage() {
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
 
-  
+  // Global call hook
+ const {
+  localStream,
+  remoteStream,
+  incomingCall,
+  isCalling,
+  isInCall,
+  callUser,
+  acceptCall,
+  rejectCall,
+  endCall,
+  initLocalStream,
+  ensureSocketConnected,
+} = useCallSocket({ currentUserId });
 
-  
+useEffect(() => {
+  if (!currentUserId) return;
+  socketService.setCurrentUserId(currentUserId);
+  socketService.connect(currentUserId);
+}, [currentUserId]);
 
   useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
@@ -130,22 +138,20 @@ export default function HomePage() {
     }
   }, []);
 
+  
+
   const toggleTheme = () => {
     setIsDark((prev) => {
       const next = !prev;
       try {
         localStorage.setItem("theme", next ? "dark" : "light");
-        if (next) {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
+        if (next) document.documentElement.classList.add("dark");
+        else document.documentElement.classList.remove("dark");
       } catch {}
       return next;
     });
   };
 
-  // ✅ Add debug useEffect to track state changes
   useEffect(() => {
     console.log("HomePage State Changes:", {
       chatType,
@@ -157,17 +163,15 @@ export default function HomePage() {
     });
   }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
 
-   // Auto-open the most recent/last-opened group when switching to group tab
+  // Auto-open group
   useEffect(() => {
     if (chatType !== "group" || selectedGroup) return;
 
-    // Try last opened group first
     const lastId = localStorage.getItem("lastSelectedGroupId");
     let target = lastId
       ? groups.find((g: any) => g?._id === lastId || g?.id === lastId)
       : undefined;
 
-    // Otherwise, pick the most recently active group
     if (!target && groups && groups.length > 0) {
       const sorted = [...groups].sort((a: any, b: any) => {
         const ta = new Date(a?.lastMessage?.createdAt || a?.updatedAt || a?.createdAt || 0).getTime();
@@ -177,7 +181,7 @@ export default function HomePage() {
       target = sorted[0];
     }
 
-     if (target) {
+    if (target) {
       const chatGroup: ChatGroup = {
         id: (target as any)._id || (target as any).id,
         _id: (target as any)._id || (target as any).id,
@@ -190,8 +194,7 @@ export default function HomePage() {
     }
   }, [chatType, groups, selectedGroup]);
 
-
- // Auto-open the most recent/last-opened direct chat when switching to direct tab
+  // Auto-open direct chat
   useEffect(() => {
     if (chatType !== "direct" || selectedUser) return;
 
@@ -218,6 +221,8 @@ export default function HomePage() {
     }
   }, [chatType, selectedUser, chatusers, dispatch]);
 
+  
+
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
     return `channel_${sortedIds[0]}_${sortedIds[1]}`;
@@ -229,52 +234,37 @@ export default function HomePage() {
     localStorage.setItem("lastSelectedUserId", contactId);
   };
 
-  // ✅ Enhanced group select handler with group chat initialization
-const handleGroupSelect = (group: ChatGroup) => {
-  // Don't generate temp IDs! Use the actual group ID from database
-  if (!group.id && !group._id) {
-    console.error("❌ Group has no valid ID:", group);
-    alert("Invalid group selected. Please try again.");
-    return;
-  }
+  const handleGroupSelect = (group: ChatGroup) => {
+    if (!group.id && !group._id) {
+      console.error("❌ Group has no valid ID:", group);
+      alert("Invalid group selected. Please try again.");
+      return;
+    }
 
-  const groupId = (group.id || group._id)!;
-  
-  // Validate it's a proper ObjectId format
-  if (!isValidObjectId(groupId)) {
-    console.error("❌ Invalid group ID format:", groupId);
-    alert("Invalid group ID format. Please contact support.");
-    return;
-  }
+    const groupId = (group.id || group._id)!;
+    if (!/^[0-9a-fA-F]{24}$/.test(groupId)) {
+      console.error("❌ Invalid group ID format:", groupId);
+      alert("Invalid group ID format. Please contact support.");
+      return;
+    }
 
-  console.log("✅ Selecting group with valid ID:", groupId);
-  
-  dispatch(
-  setSelectedGroup({
-    ...group,
-    id: groupId,
-    members: group.members ?? [], 
-  })
-);
-  dispatch(setChatType("group"));
-  localStorage.setItem("lastSelectedGroupId", groupId);
-};
+    dispatch(
+      setSelectedGroup({
+        ...group,
+        id: groupId,
+        members: group.members ?? [],
+      })
+    );
+    dispatch(setChatType("group"));
+    localStorage.setItem("lastSelectedGroupId", groupId);
+  };
 
-// Helper function to validate MongoDB ObjectId
-const isValidObjectId = (id: string): boolean => {
-  return /^[0-9a-fA-F]{24}$/.test(id);
-};
-
-
-
-  // ✅ Group message handlers
- const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
-    
-   if (!selectedGroup?.id || !msg.content.trim()) return;
-
+  // Group chat helpers
+  const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
+    if (!selectedGroup?.id || !msg.content.trim()) return;
     try {
       await sendGroupMessage({
-         content: msg.content.trim(),
+        content: msg.content.trim(),
         type: msg.type || "text",
         fileUrl: msg.fileUrl,
         fileName: msg.fileName,
@@ -287,23 +277,17 @@ const isValidObjectId = (id: string): boolean => {
   };
 
   const handleGroupTyping = () => {
-    if (selectedGroup?.id) {
-      startGroupTyping();
-    }
+    if (selectedGroup?.id) startGroupTyping();
   };
 
   const handleGroupStopTyping = () => {
-    if (selectedGroup?.id) {
-      stopGroupTyping();
-    }
+    if (selectedGroup?.id) stopGroupTyping();
   };
 
   const handleDeleteGroupMessage = async (messageId: string) => {
     try {
       const success = await deleteMessage(messageId);
-      if (success) {
-        console.log("Message deleted successfully");
-      }
+      if (success) console.log("Message deleted successfully");
     } catch (error) {
       console.error("Failed to delete message:", error);
     }
@@ -315,34 +299,31 @@ const isValidObjectId = (id: string): boolean => {
     }
   };
 
-  // ✅ Group management handlers
   const handleCreateGroup = async (groupData: { name: string; description?: string; participants: string[] }) => {
     try {
       const success = await createGroup(groupData);
-      if (success) {
-        console.log("Group created successfully");
-      }
+      if (success) console.log("Group created successfully");
     } catch (error) {
       console.error("Failed to create group:", error);
     }
   };
 
- const handleLeaveGroup = async (): Promise<boolean> => {
-  if (selectedGroup?.id) {
-    try {
-      const success = await leaveGroup();
-      if (success) {
-        dispatch(setSelectedGroup(null));
-        dispatch(setChatType("direct"));
+  const handleLeaveGroup = async (): Promise<boolean> => {
+    if (selectedGroup?.id) {
+      try {
+        const success = await leaveGroup();
+        if (success) {
+          dispatch(setSelectedGroup(null));
+          dispatch(setChatType("direct"));
+        }
+        return success;
+      } catch (error) {
+        console.error("Failed to leave group:", error);
+        return false;
       }
-      return success; // ✅ return boolean
-    } catch (error) {
-      console.error("Failed to leave group:", error);
-      return false;   // ✅ always return a boolean
     }
-  }
-  return false; // ✅ fallback
-};
+    return false;
+  };
 
   const handleNavClick = (section: string, userId?: string) => {
     switch (section) {
@@ -352,9 +333,7 @@ const isValidObjectId = (id: string): boolean => {
         break;
       case "status":
         dispatch(setActiveView("status"));
-        if (userId) {
-          dispatch(setStatusUserId(userId));
-        }
+        if (userId) dispatch(setStatusUserId(userId));
         break;
       case "notifications":
         dispatch(setActiveView("notifications"));
@@ -377,13 +356,159 @@ const isValidObjectId = (id: string): boolean => {
     }
   };
 
-  const handleVideoCall = () => {
-    setVideoCallModalOpen(true);
-  };
+  
 
-  const handleVoiceCall = () => {
-    console.log("Starting voice call...");
-  };
+  // Start call (global)
+const handleVideoCall = async (userId: string, name?: string) => {
+  try {
+    console.log('🎥 Starting video call to:', userId, name);
+    
+    // ✅ ADD THIS SAFETY CHECK FIRST
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      alert("Video calling is not supported in your browser or requires HTTPS");
+      setCurrentCallType(null);
+      return;
+    }
+    
+    // ✅ Set the call type BEFORE starting the call
+    setCurrentCallType('video');
+    
+    // Check device availability first
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasVideo = devices.some(device => device.kind === 'videoinput');
+    
+    if (!hasVideo) {
+      alert('No camera found. Please connect a camera and try again.');
+      setCurrentCallType(null);
+      return;
+    }
+    
+    // Get media stream first
+    const stream = await initLocalStream({ video: true, audio: true });
+    if (!stream) {
+      throw new Error('Failed to get video stream');
+    }
+    
+    // Make the call
+    await callUser(userId, stream, name);
+    console.log('✅ Video call initiated');
+  } catch (error) {
+    console.error('❌ Video call failed:', error);
+    setCurrentCallType(null);
+    
+    // Type guard for media errors
+    const mediaError = error as DOMException;
+    
+    let errorMessage = 'Failed to start video call.';
+    if (mediaError.name === 'NotReadableError') {
+      errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
+    } else if (mediaError.name === 'NotAllowedError') {
+      errorMessage = 'Camera access denied. Please allow camera access and try again.';
+    } else if (mediaError.name === 'NotFoundError') {
+      errorMessage = 'No camera found. Please connect a camera and try again.';
+    }
+    
+    alert(errorMessage);
+  }
+};
+
+const handleVoiceCall = async (userId: string, name?: string) => {
+  try {
+    console.log('📞 Starting voice call to:', userId, name);
+    
+    // ✅ ADD THIS SAFETY CHECK
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      alert("Voice calling is not supported in your browser or requires HTTPS");
+      return;
+    }
+    
+    // Check device availability first
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasAudio = devices.some(device => device.kind === 'audioinput');
+    
+    if (!hasAudio) {
+      alert('No microphone found. Please connect a microphone and try again.');
+      return;
+    }
+    
+    // Get media stream first
+    const stream = await initLocalStream({ video: false, audio: true });
+    if (!stream) {
+      throw new Error('Failed to get audio stream');
+    }
+    
+    // Make the call
+    await callUser(userId, stream, name);
+    console.log('✅ Voice call initiated');
+  } catch (error) {
+    console.error('❌ Voice call failed:', error);
+    
+    // Type guard for media errors
+    const mediaError = error as DOMException;
+    
+    let errorMessage = 'Failed to start voice call.';
+    if (mediaError.name === 'NotReadableError') {
+      errorMessage = 'Microphone is in use by another application. Please close other apps and try again.';
+    } else if (mediaError.name === 'NotAllowedError') {
+      errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
+    } else if (mediaError.name === 'NotFoundError') {
+      errorMessage = 'No microphone found. Please connect a microphone and try again.';
+    }
+    
+    alert(errorMessage);
+  }
+};
+
+// Update the modal open condition to be more specific
+const isCallModalOpen = Boolean(
+  incomingCall ||
+  (isInCall && (localStream || remoteStream)) ||
+  (isCalling && localStream) ||
+  callError 
+);
+
+// Add debug logging for call state
+useEffect(() => {
+  console.log('📊 Call State Debug:', {
+    incomingCall: !!incomingCall,
+    isCalling,
+    isInCall,
+    localStream: !!localStream,
+    remoteStream: !!remoteStream,
+    modalShouldBeOpen: isCallModalOpen,
+    callerName: incomingCall?.fromName || selectedUser?.name || 'Unknown'
+  });
+}, [incomingCall, isCalling, isInCall, localStream, remoteStream, isCallModalOpen, selectedUser]);
+
+const handleAcceptCall = async () => {
+  try {
+    await acceptCall();
+    setCallError(null);
+  } catch (err: any) {
+    console.log("Setting callError:", err.message);
+    setCallError(err.message || "Call accept failed");
+  }
+};
+
+const getCallerInfo = () => {
+  if (incomingCall) {
+    return {
+      name: incomingCall.fromName || 'Unknown',
+      avatar: undefined, // You might want to fetch this based on the caller ID
+    };
+  }
+  
+  if (selectedUser && (isCalling || isInCall)) {
+    return {
+      name: selectedUser.name,
+      avatar: selectedUser.profilePicture || selectedUser.avatar,
+    };
+  }
+  
+  return { name: 'Unknown', avatar: undefined };
+};
+
+const callerInfo = getCallerInfo();
 
   const handleBackToChat = () => {
     dispatch(backToChat());
@@ -391,18 +516,13 @@ const isValidObjectId = (id: string): boolean => {
 
   const bgColor = isDark ? "bg-gray-900" : "bg-gray-100";
   const receiverId = selectedUser?.id || "";
-  
-  const channelId =
-    currentUserId && receiverId ? generateChannelId(currentUserId, receiverId) : "";
+  const channelId = currentUserId && receiverId ? generateChannelId(currentUserId, receiverId) : "";
     
   useEffect(() => {
     if (channelId && currentUserId) {
-      console.log("Joining channel:", channelId);
       const socket = socketService.getSocket();
       socket?.emit('joinChannel', channelId);
-      
       return () => {
-        console.log("Leaving channel:", channelId);
         socket?.emit('leaveChannel', channelId);
       };
     }
@@ -411,7 +531,7 @@ const isValidObjectId = (id: string): boolean => {
   return (
     <>
       <div className={`relative flex h-screen ${bgColor}`}>
-         <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
+        <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
         
         <div className={`flex flex-1 transition-all duration-300 ${isLeftNavOpen ? "ml-24" : "ml-0"}`}>
           <Sidebar
@@ -422,12 +542,10 @@ const isValidObjectId = (id: string): boolean => {
           />
           
           <div className="flex-1">
-            {/* ✅ Enhanced main content rendering with group chat */}
             {(selectedUser || selectedGroup) ? (
               <>
                 {chatAreaActiveTab === "chat" && (
                   <>
-                    {/* Direct Chat */}
                     {chatType === "direct" && selectedUser ? (
                       !currentUserId || !selectedUser.id ? (
                         <div className="h-full flex items-center justify-center">
@@ -446,14 +564,13 @@ const isValidObjectId = (id: string): boolean => {
                           senderId={currentUserId}
                           currentUserId={currentUserId}
                           currentUserName={currentUserName}
-                          onVideoCall={handleVideoCall}
-                          onVoiceCall={handleVoiceCall}
+                          onVideoCall={() => handleVideoCall(selectedUser.id, selectedUser.name)}
+                          onVoiceCall={() => handleVoiceCall(selectedUser.id, selectedUser.name)}
                           isDark={isDark}
                         />
                       )
                     ) : null}
 
-                    {/* ✅ Enhanced Group Chat with all functions */}
                     {chatType === "group" && selectedGroup ? (
                       !currentUserId || !selectedGroup.id ? (
                         <div className="h-full flex items-center justify-center">
@@ -480,10 +597,9 @@ const isValidObjectId = (id: string): boolean => {
                           senderId={currentUserId}
                           currentUserId={currentUserId}
                           currentUserName={currentUserName}
-                          onVideoCall={handleVideoCall}
-                          onVoiceCall={handleVoiceCall}
+                          onVideoCall={() => handleVideoCall(selectedUser!.id, selectedUser!.name)}
+                          onVoiceCall={() => handleVoiceCall(selectedUser!.id, selectedUser!.name)}
                           isDark={isDark}
-                          // ✅ Pass group-specific props
                           isGroupChat={true}
                           groupMessages={groupMessages}
                           typingUsers={typingUsers}
@@ -507,7 +623,7 @@ const isValidObjectId = (id: string): boolean => {
                       )
                     ) : null}
 
-                    {/* ✅ Enhanced fallback */}
+                    {/* Fallback */}
                     {(!chatType || (chatType === "direct" && !selectedUser) || (chatType === "group" && !selectedGroup)) && (
                       <div className={`h-full flex items-center justify-center ${isDark ? "bg-gray-800" : "bg-[#f0f2f5]"}`}>
                         <div className="text-center">
@@ -519,7 +635,6 @@ const isValidObjectId = (id: string): boolean => {
                               ? "Select a group to start chatting" 
                               : "Select a contact to start chatting"}
                           </p>
-                          {/* Show connection status for groups */}
                           {chatType === "group" && !isGroupConnected && (
                             <p className="text-yellow-500 mt-2">
                               Connecting to group chat...
@@ -533,7 +648,7 @@ const isValidObjectId = (id: string): boolean => {
 
                 {chatAreaActiveTab === "call" && <div />}
                 
-                {/* ✅ Contact info tab - only for direct chats */}
+                {/* Contact info (direct) */}
                 {chatAreaActiveTab === "contact" && selectedUser && chatType === "direct" && (
                   <DetailedContactInfo
                     contact={{
@@ -552,7 +667,7 @@ const isValidObjectId = (id: string): boolean => {
                   />
                 )}
 
-                {/* ✅ Group info tab - only for group chats */}
+                {/* Group info */}
                 {chatAreaActiveTab === "contact" && selectedGroup && chatType === "group" && (
                   <div className="h-full bg-white p-6">
                     <div className="text-center mb-6">
@@ -572,7 +687,6 @@ const isValidObjectId = (id: string): boolean => {
                       )}
                     </div>
 
-                    {/* Group actions */}
                     <div className="space-y-2">
                       {canManageGroup && (
                         <button 
@@ -607,7 +721,54 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
-      
+        {/* Global Call Modal */}
+<CallModal
+  open={isCallModalOpen}
+  onClose={() => {
+    // Only allow closing if we're not in the middle of accepting a call
+    if (!isInCall || remoteStream) {
+      endCall();
+    }
+  }}
+  callError={callError}
+  onAccept={handleAcceptCall}
+  incomingCall={incomingCall}
+  localStream={localStream}
+  remoteStream={remoteStream}
+  isIncoming={!!incomingCall && !isInCall}
+  isInCall={isInCall || (isCalling && !!localStream)}
+  // onAccept={acceptCall}
+  onReject={rejectCall}
+  onEndCall={endCall}
+  onToggleMic={() => {
+    if (localStream) {
+      const track = localStream.getAudioTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        setIsMicOn(track.enabled);
+      }
+    }
+  }}
+  onToggleVideo={() => {
+    if (localStream) {
+      const track = localStream.getVideoTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        setIsVideoOn(track.enabled);
+      }
+    }
+  }}
+  onToggleSpeaker={() => setIsSpeakerOn(!isSpeakerOn)}
+  isMicOn={isMicOn}
+  isVideoOn={isVideoOn}
+  isSpeakerOn={isSpeakerOn}
+  callerName={incomingCall?.fromName || selectedUser?.name || 'Unknown'}
+  callerAvatar={
+    incomingCall 
+      ? undefined // You might want to fetch this based on caller ID
+      : selectedUser?.profilePicture || selectedUser?.avatar
+  }
+/>
       </div>
     </>
   );

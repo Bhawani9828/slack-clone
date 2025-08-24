@@ -1,521 +1,651 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { socketService } from '@/lib/socket';
+"use client"
 
-interface CallStreams {
-  localStream: MediaStream | null;
-  remoteStream: MediaStream | null;
-}
-
-interface CallState {
-  isCalling: boolean;
-  isInCall: boolean;
-  incomingCall: {
-    from: string;
-    type: 'video' | 'audio';
-    offer: any;
-    fromName?: string;
-  } | null;
-}
-
+import { useEffect, useRef, useState, useCallback } from "react"
+import { socketService } from "@/lib/socket"
+import { createFallbackBeep } from "@/lib/audioUtils";
 interface UseCallSocketProps {
-  currentUserId: string;
+  currentUserId: string
 }
 
 export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [isCalling, setIsCalling] = useState(false);
-  const [isInCall, setIsInCall] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null)
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [isCalling, setIsCalling] = useState(false)
+  const [isInCall, setIsInCall] = useState(false)
   const [incomingCall, setIncomingCall] = useState<{
-    from: string;
-    type: 'video' | 'audio';
-    offer: any;
-    fromName?: string;
-  } | null>(null);
+    from: string
+    type: "video" | "audio"
+    offer: any
+    fromName?: string
+    callId?: string
+  } | null>(null)
+  const [deviceStatus, setDeviceStatus] = useState<{
+    camera: boolean
+    microphone: boolean
+    checking: boolean
+  }>({ camera: false, microphone: false, checking: false })
 
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const socketRef = useRef<any>(null);
-  const endCallRef = useRef<() => void>(() => {});
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const socketRef = useRef<any>(null)
+  const endCallRef = useRef<() => void>(() => {})
+  const justAcceptedAtRef = useRef<number>(0)
+
   const currentCallRef = useRef<{
-    targetUserId?: string;
-    type?: 'video' | 'audio';
-  }>({});
+    targetUserId?: string
+    type?: "video" | "audio"
+    callId?: string
+  }>({})
 
-  // Initialize WebRTC peer connection
-  const createPeerConnection = useCallback((stream?: MediaStream) => {
-    console.log('🔗 Creating new peer connection...');
-    
-    const configuration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
-    };
-
-    const pc = new RTCPeerConnection(configuration);
-    
-    // Add local stream tracks to peer connection
-    const streamToUse = stream || localStream;
-    if (streamToUse) {
-      console.log('🔗 Adding tracks to peer connection:', streamToUse.getTracks().length);
-      streamToUse.getTracks().forEach(track => {
-        console.log('📡 Adding track:', { kind: track.kind, enabled: track.enabled });
-        pc.addTrack(track, streamToUse);
-      });
-    } else {
-      console.warn('⚠️ No stream available for peer connection');
+  // Enhanced error logging function
+  const logError = (context: string, error: any) => {
+    const errorInfo = {
+      context,
+      message: error?.message || "Unknown error",
+      name: error?.name || "UnknownError",
+      stack: error?.stack,
+      constraint: error?.constraint,
+      code: error?.code,
+      toString: error?.toString?.() || String(error),
     }
+    console.error(`❌ ${context}:`, errorInfo)
+    return errorInfo
+  }
 
-    // Handle incoming remote stream
-    pc.ontrack = (event) => {
-      console.log('📥 Remote track received:', event.track.kind);
-      if (event.streams && event.streams[0]) {
-        console.log('📥 Setting remote stream:', event.streams[0].id);
-        setRemoteStream(event.streams[0]);
+  // Check device availability with enhanced error handling
+  const checkAndPrepareDevices = useCallback(
+    async (constraints: MediaStreamConstraints): Promise<boolean> => {
+      try {
+        setDeviceStatus((prev) => ({ ...prev, checking: true }))
+        setCallError(null)
+
+        console.log("🔍 Starting device check with constraints:", constraints)
+
+        // First, stop any existing streams to free up devices
+        if (localStream) {
+          console.log("🛑 Stopping existing local stream to free devices...")
+          localStream.getTracks().forEach((track) => {
+            track.stop()
+            console.log(`Stopped ${track.kind} track: ${track.label}`)
+          })
+          setLocalStream(null)
+
+          await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+
+        // Check available devices
+        console.log("📋 Enumerating devices...")
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        console.log(
+          "📋 Available devices:",
+          devices.map((d) => ({ kind: d.kind, label: d.label, deviceId: d.deviceId })),
+        )
+
+        const hasCamera = devices.some((device) => device.kind === "videoinput")
+        const hasMicrophone = devices.some((device) => device.kind === "audioinput")
+
+        console.log("📋 Device availability:", { hasCamera, hasMicrophone })
+
+         // ✅ ADD THIS SAFETY CHECK
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        setCallError("Media devices not supported in this browser");
+        setDeviceStatus((prev) => ({ ...prev, checking: false }));
+        return false;
       }
-    };
 
-    // Handle ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('🧊 ICE candidate generated');
-        const targetUserId = currentCallRef.current.targetUserId || incomingCall?.from;
-        
-        if (targetUserId && socketRef.current) {
-          console.log('🧊 Sending ICE candidate to:', targetUserId);
-          socketRef.current.emit('ice-candidate', {
-            to: targetUserId,
-            from: currentUserId,
-            candidate: event.candidate,
-          });
+        setDeviceStatus({
+          camera: hasCamera,
+          microphone: hasMicrophone,
+          checking: false,
+        })
+
+        if (constraints.video && !hasCamera) {
+          const error = "No camera found. Please connect a camera and try again."
+          setCallError(error)
+          throw new Error(error)
+        }
+
+        if (constraints.audio && !hasMicrophone) {
+          const error = "No microphone found. Please connect a microphone and try again."
+          setCallError(error)
+          throw new Error(error)
+        }
+
+        // Try to get temporary stream to check if devices are available
+        console.log("🧪 Testing device availability with constraints:", constraints)
+        try {
+          const testStream = await navigator.mediaDevices.getUserMedia(constraints)
+          console.log("✅ Device test successful:", {
+            tracks: testStream.getTracks().map((t) => ({ kind: t.kind, label: t.label, enabled: t.enabled })),
+          })
+
+          // Stop test stream immediately
+          testStream.getTracks().forEach((track) => {
+            track.stop()
+            console.log(`Stopped test ${track.kind} track: ${track.label}`)
+          })
+
+          await new Promise((resolve) => setTimeout(resolve, 200))
+
+          return true
+        } catch (testError) {
+          const errorInfo = logError("Device test failed", testError)
+
+          // Determine error type and provide specific message
+          let errorMessage = "Failed to access camera/microphone."
+          const error = testError as DOMException
+
+    if (error.name === "NotReadableError" || errorInfo.message.includes("in use")) {
+  createFallbackBeep();
+}
+
+          setCallError(errorMessage)
+          throw new Error(errorMessage)
+        }
+      } catch (error) {
+        setDeviceStatus((prev) => ({ ...prev, checking: false }))
+        if (error instanceof Error) {
+          // Error already logged and handled above
+          throw error
         } else {
-          console.warn('⚠️ No target user ID for ICE candidate');
+          const errorInfo = logError("Device check failed", error)
+          const errorMessage = `Unexpected error during device check: ${errorInfo.message}`
+          setCallError(errorMessage)
+          throw new Error(errorMessage)
         }
       }
-    };
+    },
+    [localStream],
+  )
 
-    // Connection state monitoring
-    pc.onconnectionstatechange = () => {
-      console.log('🔗 Connection state changed:', pc.connectionState);
-    };
+  // Enhanced initLocalStream with better error handling and device management
+  const initLocalStream = useCallback(
+    async (constraints: MediaStreamConstraints): Promise<MediaStream | null> => {
+      try {
+        console.log("🎥 Initializing local stream...")
 
-    pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state changed:', pc.iceConnectionState);
-    };
+        // Check and prepare devices first
+        const devicesReady = await checkAndPrepareDevices(constraints)
+        if (!devicesReady) {
+          throw new Error("Devices not ready")
+        }
 
-    peerConnectionRef.current = pc;
-    return pc;
-  }, [localStream, incomingCall, currentUserId]);
+        console.log("🎥 Requesting media stream with constraints:", constraints)
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
-  // Initialize local media stream
-  const initLocalStream = useCallback(async (constraints: MediaStreamConstraints) => {
+        console.log(
+          "✅ Got media stream with tracks:",
+          stream.getTracks().map((t) => ({
+            kind: t.kind,
+            label: t.label,
+            enabled: t.enabled,
+            readyState: t.readyState,
+            muted: t.muted,
+          })),
+        )
+
+        setLocalStream(stream)
+        return stream
+      } catch (error) {
+        const errorInfo = logError("Failed to get user media", error)
+
+        setCallError(`Failed to access camera/microphone: ${errorInfo.message}`)
+
+        return null
+      }
+    },
+    [checkAndPrepareDevices],
+  )
+
+  // Simplified socket connection with better error handling
+  const ensureSocketConnected = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('🎥 Requesting media permissions with constraints:', constraints);
-      
-      // Check if MediaDevices API is supported
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('MediaDevices API is not supported in this browser');
+      if (socketRef.current?.connected) {
+        console.log("✅ Socket already connected")
+        return true
       }
 
-      // Check if we're in a secure context
-      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        throw new Error('MediaDevices API requires HTTPS or localhost for security reasons');
+      console.log("🔌 Connecting socket for calls...")
+      socketService.setCurrentUserId(currentUserId)
+      const socket = socketService.connect(currentUserId)
+
+      if (!socket) {
+        console.error("❌ Failed to create socket instance")
+        return false
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('✅ Media stream obtained successfully:', stream.id);
-      console.log('📹 Stream details:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(track => ({
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState
-        }))
-      });
-      
-      // Set the stream in state
-      setLocalStream(stream);
-      console.log('📹 Stream state updated');
-      
-      return stream;
-    } catch (error: any) {
-      console.error('❌ Error accessing media devices:', error);
-      
-      // Provide specific error messages
-      let errorMessage = 'Failed to access media devices';
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage = 'Camera/microphone permission denied. Please allow access in your browser settings.';
-      } else if (error.name === 'NotFoundError') {
-        errorMessage = 'No camera or microphone found. Please connect the required devices.';
-      } else if (error.name === 'NotSupportedError') {
-        errorMessage = 'Camera/microphone not supported in this browser.';
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = 'Camera/microphone is already in use by another application.';
-      } else if (error.name === 'OverconstrainedError') {
-        errorMessage = 'Camera/microphone constraints not satisfied.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      socketRef.current = socket
+
+      if (socket.connected) {
+        console.log("✅ Socket connected immediately")
+        return true
       }
-      
-      const enhancedError = new Error(errorMessage);
-      enhancedError.name = error.name;
-      throw enhancedError;
-    }
-  }, []);
 
-  // Call a user
-  const callUser = useCallback(async (userId: string, stream?: MediaStream, callerName?: string) => {
-    console.log('📞 ===== INITIATING CALL =====');
-    console.log('📞 Target userId:', userId);
-    console.log('📞 Caller name:', callerName);
-    console.log('📞 Current userId:', currentUserId);
-    console.log('📞 Stream provided:', !!stream);
-    
-    // Store call info for reference
-    currentCallRef.current = {
-      targetUserId: userId,
-      type: stream && stream.getVideoTracks().length > 0 ? 'video' : 'audio',
-    };
-    
-    // Use the passed stream if available, otherwise use the state
-    const streamToUse = stream || localStream;
-    
-    if (!streamToUse) {
-      throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
-    }
+      return new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn("⚠️ Socket connection timeout")
+          socket.off("connect", onConnect)
+          resolve(socket.connected)
+        }, 5000)
 
-    if (!socketRef.current) {
-      throw new Error('Socket not connected');
-    }
+        const onConnect = () => {
+          clearTimeout(timeout)
+          socket.off("connect", onConnect)
+          console.log("✅ Socket connected for calls")
+          resolve(true)
+        }
 
-    setIsCalling(true);
-    console.log('🔗 Creating peer connection for outgoing call...');
-    const pc = createPeerConnection(streamToUse);
-
-    try {
-      console.log('📤 Creating offer...');
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const callData = {
-        to: userId,
-        from: currentUserId,
-        fromName: callerName || 'Unknown Caller',
-        offer,
-        type: streamToUse.getVideoTracks().length > 0 ? 'video' : 'audio',
-      };
-      
-      console.log('📡 Emitting call-user event:', callData);
-      socketRef.current.emit('call-user', callData);
-      
-      console.log('✅ Call initiated successfully');
+        socket.on("connect", onConnect)
+      })
     } catch (error) {
-      console.error('❌ Error creating offer:', error);
-      setIsCalling(false);
-      currentCallRef.current = {};
-      throw error;
+      logError("Socket connection error", error)
+      return false
     }
-  }, [localStream, createPeerConnection, currentUserId]);
+  }, [currentUserId])
 
-  // Accept incoming call
-  const acceptCall = useCallback(async () => {
-    if (!incomingCall) {
-      console.error('❌ No incoming call to accept');
-      return;
-    }
+  const createPeerConnection = useCallback(
+    (stream?: MediaStream) => {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
+      })
 
-    console.log('📞 ===== ACCEPTING CALL =====');
-    console.log('📞 Accepting call from:', incomingCall.from);
-    console.log('📞 Call type:', incomingCall.type);
-    
-    try {
-      // Initialize local stream for the receiver
-      const constraints = {
-        video: incomingCall.type === 'video',
-        audio: true
-      };
-      
-      console.log('🎥 Getting media stream for call acceptance...');
-      const stream = await initLocalStream(constraints);
-      if (!stream) {
-        throw new Error('Failed to initialize local stream');
+      const streamToUse = stream || localStream
+      if (streamToUse) {
+        streamToUse.getTracks().forEach((track) => {
+          console.log(`Adding ${track.kind} track to peer connection:`, track.label)
+          pc.addTrack(track, streamToUse)
+        })
       }
 
-      // Store call info
+      pc.ontrack = (event) => {
+        console.log("📥 Received remote track:", event.track.kind)
+        if (event.streams && event.streams[0]) {
+          setRemoteStream(event.streams[0])
+        }
+      }
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          const targetUserId = currentCallRef.current.targetUserId || incomingCall?.from
+          if (targetUserId && socketRef.current?.connected) {
+            socketRef.current.emit("ice-candidate", {
+              to: targetUserId,
+              from: currentUserId,
+              candidate: event.candidate,
+              callId: currentCallRef.current.callId,
+            })
+          }
+        }
+      }
+
+      pc.onconnectionstatechange = () => {
+        console.log("🔗 Peer connection state:", pc.connectionState)
+        if (pc.connectionState === "failed") {
+          console.error("❌ Peer connection failed")
+          setCallError("Connection failed. Please try again.")
+        }
+      }
+
+      peerConnectionRef.current = pc
+      return pc
+    },
+    [localStream, incomingCall, currentUserId],
+  )
+
+  const callUser = useCallback(
+    async (userId: string, stream?: MediaStream, callerName?: string) => {
+      try {
+        console.log("📞 Starting call to:", userId)
+
+        const isConnected = await ensureSocketConnected()
+        if (!isConnected && !socketRef.current?.connected) {
+          throw new Error("Failed to connect to server. Please check your internet connection.")
+        }
+
+        const callId = `${Date.now()}-${currentUserId}`
+        currentCallRef.current = {
+          targetUserId: userId,
+          type: stream && stream.getVideoTracks().length > 0 ? "video" : "audio",
+          callId,
+        }
+
+        const streamToUse = stream || localStream
+        if (!streamToUse) {
+          throw new Error("Local stream not initialized.")
+        }
+
+        setIsCalling(true)
+        setCallError(null)
+        const pc = createPeerConnection(streamToUse)
+
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+
+        console.log("📤 Emitting call-user event with ID:", callId)
+        socketRef.current.emit("call-user", {
+          to: userId,
+          from: currentUserId,
+          fromName: callerName || "Unknown Caller",
+          offer,
+          type: streamToUse.getVideoTracks().length > 0 ? "video" : "audio",
+          callId,
+        })
+      } catch (error) {
+        logError("Call failed", error)
+        setIsCalling(false)
+        currentCallRef.current = {}
+        throw error
+      }
+    },
+    [localStream, createPeerConnection, currentUserId, ensureSocketConnected],
+  )
+
+  const acceptCall = useCallback(async () => {
+    if (!incomingCall) return
+
+    console.log("📞 Accepting call from:", incomingCall.from)
+    justAcceptedAtRef.current = Date.now()
+
+    try {
+      const constraints = { video: incomingCall.type === "video", audio: true }
+      console.log("🎥 Getting media for accept call:", constraints)
+
+      // Use the enhanced initLocalStream
+      const stream = await initLocalStream(constraints)
+      if (!stream) {
+        throw new Error("Failed to initialize local stream for call")
+      }
+
+      console.log("✅ Got local stream for accept call")
+
       currentCallRef.current = {
         targetUserId: incomingCall.from,
         type: incomingCall.type,
-      };
+        callId: incomingCall.callId,
+      }
 
-      setIsInCall(true);
-      
-      console.log('🔗 Creating peer connection for incoming call...');
-      const pc = createPeerConnection(stream);
-      
-      console.log('📥 Setting remote description from offer...');
-      await pc.setRemoteDescription(incomingCall.offer);
-      
-      console.log('📤 Creating answer...');
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      setIsInCall(true)
+      setIsCalling(false)
 
-      console.log('📡 Sending call acceptance...');
-      socketRef.current?.emit('call-accepted', {
+      const pc = createPeerConnection(stream)
+      console.log("🔗 Created peer connection, setting remote description")
+
+      await pc.setRemoteDescription(incomingCall.offer)
+      console.log("✅ Set remote description")
+
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+      console.log("✅ Created and set local description (answer)")
+
+      socketRef.current?.emit("call-accepted", {
         to: incomingCall.from,
         from: currentUserId,
         answer,
-      });
+        callId: incomingCall.callId,
+      })
 
-      // Clear incoming call state but keep call modal open
-      setIncomingCall(null);
-      console.log('✅ Call accepted successfully');
-      
+      console.log("📤 Sent call-accepted event")
+      setIncomingCall(null)
     } catch (error) {
-      console.error('❌ Error accepting call:', error);
-      setIsInCall(false);
-      setIncomingCall(null);
-      currentCallRef.current = {};
+      const errorInfo = logError("Accept call failed", error)
+
+      if (localStream) {
+        localStream.getTracks().forEach((track) => track.stop())
+        setLocalStream(null)
+      }
+
+      setIsInCall(false)
+      setIsCalling(false)
+
+      // Show user-friendly error message
+      const errorMessage = callError || `Failed to accept call: ${errorInfo.message}`
+      alert(errorMessage)
+
+      setTimeout(() => {
+        setIncomingCall(null)
+        currentCallRef.current = {}
+      }, 1000)
     }
-  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId]);
+  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId, callError, localStream])
 
-  // Reject incoming call
   const rejectCall = useCallback(() => {
-    if (!incomingCall) return;
+    if (!incomingCall) return
 
-    console.log('❌ ===== REJECTING CALL =====');
-    console.log('❌ Rejecting call from:', incomingCall.from);
-    
-    // Notify caller about rejection
-    socketRef.current?.emit('call-rejected', {
+    socketRef.current?.emit("call-rejected", {
       to: incomingCall.from,
       from: currentUserId,
-    });
+      callId: incomingCall.callId,
+    })
 
-    // Clear incoming call state
-    setIncomingCall(null);
-    currentCallRef.current = {};
-    console.log('✅ Call rejected successfully');
-  }, [incomingCall, currentUserId]);
+    setIncomingCall(null)
+    currentCallRef.current = {}
+  }, [incomingCall, currentUserId])
 
-  // End call
   const endCall = useCallback(() => {
-    console.log('📞 ===== ENDING CALL =====');
-    
-    const targetUserId = currentCallRef.current.targetUserId || incomingCall?.from;
-    
-    // Stop all tracks
+    const targetUserId = currentCallRef.current.targetUserId || incomingCall?.from
+
+    console.log("📞 Ending call with:", targetUserId)
+
+    // Stop tracks
     if (localStream) {
-      localStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('🔇 Stopped local track:', track.kind);
-      });
+      localStream.getTracks().forEach((track) => {
+        track.stop()
+        console.log(`Stopped local ${track.kind} track:`, track.label)
+      })
     }
     if (remoteStream) {
-      remoteStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('🔇 Stopped remote track:', track.kind);
-      });
+      remoteStream.getTracks().forEach((track) => {
+        track.stop()
+        console.log(`Stopped remote ${track.kind} track:`, track.label)
+      })
     }
 
-    // Close peer connection
+    // Close PC
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-      console.log('🔗 Peer connection closed');
+      peerConnectionRef.current.close()
+      peerConnectionRef.current = null
     }
 
-    // Notify other user about call end
-    if (targetUserId && socketRef.current) {
-      console.log('📡 Notifying call end to:', targetUserId);
-     socketRef.current?.emit('end-call', {
-  to: targetUserId,
-  from: currentUserId,
-});
+    // Notify other side
+    if (targetUserId && socketRef.current?.connected) {
+      socketRef.current.emit("end-call", {
+        to: targetUserId,
+        from: currentUserId,
+        callId: currentCallRef.current.callId,
+      })
     }
 
     // Reset state
-    setLocalStream(null);
-    setRemoteStream(null);
-    setIsCalling(false);
-    setIsInCall(false);
-    setIncomingCall(null);
-    currentCallRef.current = {};
-    
-    console.log('✅ Call ended successfully');
-  }, [localStream, remoteStream, incomingCall, currentUserId]);
+    setLocalStream(null)
+    setRemoteStream(null)
+    setIsCalling(false)
+    setIsInCall(false)
+    setIncomingCall(null)
+    setCallError(null)
+    currentCallRef.current = {}
+  }, [localStream, remoteStream, incomingCall, currentUserId])
 
-  // Setup socket listeners
   useEffect(() => {
-    if (!currentUserId) {
-      console.warn('⚠️ No current user ID provided to useCallSocket');
-      return;
+    endCallRef.current = endCall
+  }, [endCall])
+   useEffect(() => {
+    socketService.onIncomingCall((data) => {
+      setIncomingCall(data); // Modal open logic
+    });
+    socketService.onCallAccepted((data) => {
+      // handle call accepted
+    });
+    // ...other listeners...
+
+    return () => {
+      socketService.offIncomingCall();
+      socketService.offCallAccepted();
+      // ...other cleanup...
+    };
+  }, [currentUserId]);
+
+  // Main socket setup effect - Enhanced with better call ID handling
+  useEffect(() => {
+    if (!currentUserId) return
+
+    let cleanup: (() => void) | undefined
+
+    const initSocket = async () => {
+      try {
+        await ensureSocketConnected()
+        const socket = socketRef.current
+        if (!socket) {
+          console.warn("⚠️ Socket not available, retrying...")
+          return
+        }
+
+        console.log("📡 Setting up call event listeners...")
+
+        // Clear existing listeners
+        // const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"]
+        // events.forEach((event) => socket.off(event))
+
+        const handleIncomingCall = (data: any) => {
+          console.log("📞 Incoming call received:", data)
+          setIncomingCall(data);
+  setTimeout(() => {
+    console.log("📞 incomingCall state after set:", incomingCall);
+  }, 500);
+
+          if (!data || data.from === currentUserId || !data.offer || !data.callId) {
+            console.log("📞 Invalid incoming call data, ignoring")
+            return
+          }
+
+          // Check for duplicate calls using callId
+          if (incomingCall && incomingCall.callId === data.callId) {
+            console.log("📞 Duplicate incoming call ignored (same callId)")
+            return
+          }
+
+          // Store call ID and show incoming call
+          currentCallRef.current.callId = data.callId
+          setIncomingCall({
+            from: data.from,
+            type: data.type || "video",
+            offer: data.offer,
+            fromName: data.fromName || "Unknown Caller",
+            callId: data.callId,
+          })
+
+          console.log("📞 Incoming call state set with callId:", data.callId)
+        }
+
+        const handleCallAccepted = async (data: any) => {
+          console.log("✅ Call accepted:", data)
+
+          if (!data?.callId || data.callId !== currentCallRef.current.callId) {
+            console.log(
+              "❌ Call ID mismatch for accepted call, expected:",
+              currentCallRef.current.callId,
+              "got:",
+              data?.callId,
+            )
+            return
+          }
+
+          if (peerConnectionRef.current && data.answer) {
+            try {
+              await peerConnectionRef.current.setRemoteDescription(data.answer)
+              setIsCalling(false)
+              setIsInCall(true)
+              console.log("✅ Call established successfully")
+            } catch (error) {
+              logError("Error setting remote description", error)
+              setCallError("Failed to establish connection")
+            }
+          }
+        }
+
+        const handleCallRejected = (data: any) => {
+          console.log("❌ Call rejected:", data)
+          if (data?.callId && data.callId !== currentCallRef.current.callId) {
+            console.log("❌ Call ID mismatch for rejected call, ignoring")
+            return
+          }
+          setIsCalling(false)
+          setIsInCall(false)
+          setIncomingCall(null)
+          currentCallRef.current = {}
+        }
+
+        const handleCallEnded = (data: any) => {
+          console.log("📞 Call ended:", data)
+
+          if (data?.callId && data.callId !== currentCallRef.current.callId) {
+            console.log(
+              "❌ Call ID mismatch for end call, expected:",
+              currentCallRef.current.callId,
+              "got:",
+              data?.callId,
+            )
+            return
+          }
+
+          if (Date.now() - justAcceptedAtRef.current < 2000) {
+            console.warn("⚠️ Ignoring spurious call-ended right after accept")
+            return
+          }
+
+          endCallRef.current?.()
+        }
+
+        
+
+        const handleIceCandidate = async (data: any) => {
+          if (data?.callId && data.callId !== currentCallRef.current.callId) {
+            console.log("❄️ ICE candidate callId mismatch, ignoring")
+            return
+          }
+//           const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"];
+// events.forEach((event) => socket.off(event));
+
+          if (peerConnectionRef.current && data.candidate) {
+            try {
+              await peerConnectionRef.current.addIceCandidate(data.candidate)
+            } catch (error) {
+              logError("Error adding ICE candidate", error)
+            }
+          }
+        }
+
+        
+
+        // Set up event listeners
+        socket.on("incoming-call", handleIncomingCall);
+        socket.on("call-accepted", handleCallAccepted)
+        socket.on("call-rejected", handleCallRejected)
+        socket.on("call-ended", handleCallEnded)
+        socket.on("ice-candidate", handleIceCandidate)
+
+        console.log("✅ Call event listeners setup complete")
+
+        // cleanup = () => {
+        //   events.forEach((event) => socket.off(event))
+        // }
+      } catch (error) {
+        logError("Error initializing socket for calls", error)
+      }
     }
 
-    const socket = socketService.getSocket();
-    if (!socket) {
-      console.warn('⚠️ No socket connection available for calls');
-      return;
+    const initTimeout = setTimeout(initSocket, 100)
+    return () => {
+      clearTimeout(initTimeout)
+      cleanup?.()
     }
+  }, [currentUserId, ensureSocketConnected, incomingCall])
 
-    socketRef.current = socket;
-    console.log('🔌 ===== SETTING UP CALL SOCKET LISTENERS =====');
-    console.log('🔌 Socket ID:', socket.id);
-    console.log('🔌 Current User ID:', currentUserId);
-
-    // Listen for incoming calls
-    const handleIncomingCall = (data: any) => {
-      console.log('📞 ===== INCOMING CALL RECEIVED =====');
-      console.log('📞 Call data received:', data);
-      console.log('📞 From:', data.from);
-      console.log('📞 From Name:', data.fromName);
-      console.log('📞 Type:', data.type);
-      console.log('📞 Current User ID:', currentUserId);
-      
-      // Don't accept call from yourself
-      if (data.from === currentUserId) {
-        console.warn('⚠️ Ignoring call from self');
-        return;
-      }
-
-      // Check if offer exists
-      if (!data.offer) {
-        console.error('❌ No offer in incoming call data');
-        return;
-      }
-
-      console.log('✅ Setting incoming call state...');
-      setIncomingCall({
-        from: data.from,
-        type: data.type,
-        offer: data.offer,
-        fromName: data.fromName,
-      });
-      
-      console.log('✅ Incoming call state updated - modal should open now!');
-    };
-
-    // Listen for call accepted
-    const handleCallAccepted = async (data: any) => {
-      console.log('✅ ===== CALL ACCEPTED =====');
-      console.log('✅ Call accepted by:', data.from);
-      console.log('✅ Answer received:', !!data.answer);
-      
-      if (peerConnectionRef.current && data.answer) {
-        try {
-          console.log('📥 Setting remote description from answer...');
-          await peerConnectionRef.current.setRemoteDescription(data.answer);
-          setIsCalling(false);
-          setIsInCall(true);
-          console.log('✅ Remote description set, call established');
-        } catch (error) {
-          console.error('❌ Error setting remote description:', error);
-        }
-      } else {
-        console.error('❌ No peer connection or answer available');
-      }
-    };
-
-    // Listen for call rejected
-    const handleCallRejected = (data: any) => {
-      console.log('❌ ===== CALL REJECTED =====');
-      console.log('❌ Call rejected by:', data.from);
-      setIsCalling(false);
-      setIsInCall(false);
-      setIncomingCall(null);
-      currentCallRef.current = {};
-      
-      // You might want to show a notification here
-      console.log('📱 Call was rejected by the user');
-    };
-
-    // Listen for call ended
-    const handleCallEnded = (data: any) => {
-      console.log('📞 ===== CALL ENDED BY REMOTE =====');
-      console.log('📞 Call ended by:', data.from);
-      endCall();
-    };
-
-    // Listen for ICE candidates
-    const handleIceCandidate = async (data: any) => {
-      console.log('🧊 ===== ICE CANDIDATE RECEIVED =====');
-      console.log('🧊 ICE candidate received from:', data.from);
-      console.log('🧊 Candidate:', data.candidate);
-      
-      if (peerConnectionRef.current && data.candidate) {
-        try {
-          await peerConnectionRef.current.addIceCandidate(data.candidate);
-          console.log('✅ ICE candidate added successfully');
-        } catch (error) {
-          console.error('❌ Error adding ICE candidate:', error);
-        }
-      } else {
-        console.warn('⚠️ No peer connection available for ICE candidate');
-      }
-    };
-
-    // Listen for call failed
-    const handleCallFailed = (data: any) => {
-      console.error('❌ ===== CALL FAILED =====');
-      console.error('❌ Call failed:', data);
-      setIsCalling(false);
-      setIsInCall(false);
-      currentCallRef.current = {};
-      alert(`Call failed: ${data.error || 'Unknown error'}`);
-    };
-
-    // Listen for call initiated confirmation
-    const handleCallInitiated = (data: any) => {
-      console.log('✅ ===== CALL INITIATED CONFIRMATION =====');
-      console.log('✅ Call initiated to:', data.targetUserId);
-      console.log('✅ Call type:', data.callType);
-    };
-
-    // Register event listeners
-    socket.on('incoming-call', handleIncomingCall);
-    socket.on('call-accepted', handleCallAccepted);
-    socket.on('call-rejected', handleCallRejected);
-    socket.on('call-ended', handleCallEnded);
-    socket.on('ice-candidate', handleIceCandidate);
-    socket.on('call-failed', handleCallFailed);
-    socket.on('call-initiated', handleCallInitiated);
-
-    console.log('✅ All call event listeners registered');
-
-    // Test socket connection
-    socket.emit('test-call-connection', { userId: currentUserId });
-
-    // Cleanup listeners on unmount
-    return () => {
-      console.log('🧹 ===== CLEANING UP CALL SOCKET LISTENERS =====');
-      socket.off('incoming-call', handleIncomingCall);
-      socket.off('call-accepted', handleCallAccepted);
-      socket.off('call-rejected', handleCallRejected);
-      socket.off('call-ended', handleCallEnded);
-      socket.off('ice-candidate', handleIceCandidate);
-      socket.off('call-failed', handleCallFailed);
-      socket.off('call-initiated', handleCallInitiated);
-      console.log('✅ Call listeners cleaned up');
-    };
-  }, [currentUserId, endCall]);
-
-  // Monitor state changes for debugging
-  useEffect(() => {
-    console.log('📊 ===== CALL STATE CHANGED =====');
-    console.log('📊 isCalling:', isCalling);
-    console.log('📊 isInCall:', isInCall);
-    console.log('📊 incomingCall:', incomingCall ? `from ${incomingCall.from} (${incomingCall.type})` : 'none');
-    console.log('📊 localStream:', localStream ? `${localStream.id} (${localStream.getTracks().length} tracks)` : 'none');
-    console.log('📊 remoteStream:', remoteStream ? `${remoteStream.id} (${remoteStream.getTracks().length} tracks)` : 'none');
-  }, [isCalling, isInCall, incomingCall, localStream, remoteStream]);
-
-  // Cleanup on unmount
+  // Cleanup effect
   useEffect(() => {
     return () => {
-      console.log('🧹 useCallSocket cleanup - ending any active calls');
-      endCall();
-    };
-  }, [endCall]);
+      endCallRef.current?.()
+    }
+  }, [])
 
   return {
     localStream,
@@ -527,12 +657,16 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     acceptCall,
     rejectCall,
     endCall,
+    callError,
+    deviceStatus,
     initLocalStream,
-    // Debug info
+    ensureSocketConnected,
+    checkAndPrepareDevices,
     debugInfo: {
       currentUserId,
       socketConnected: !!socketRef.current?.connected,
       currentCall: currentCallRef.current,
-    }
-  };
-};
+      hasIncomingCall: !!incomingCall,
+    },
+  }
+}

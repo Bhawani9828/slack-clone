@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type React from "react";
 import {
   Avatar,
@@ -19,8 +19,7 @@ import {
   Apps,
 } from "@mui/icons-material";
 import UserAvatar from "./UserAvatar";
-import { useCallSocket } from "@/hooks/useCallSocket";
-import CallModal from "../modals/CallModal";
+// Call handling is managed at page level via a global hook and modal
 
 interface Contact {
   userId: string;
@@ -44,9 +43,9 @@ interface ChatHeaderProps {
     isTyping?: boolean;
     userId?: string;
   };
-   currentUserId: string;
-  onVideoCall?: () => void;
-  onVoiceCall?: () => void;
+  currentUserId: string;
+  onVideoCall?: (userId: string, name?: string, avatarUrl?: string) => void;
+  onVoiceCall?: (userId: string, name?: string, avatarUrl?: string) => void;
   isTyping?: boolean;
   
   // ✅ Group chat specific props
@@ -79,159 +78,20 @@ export default function ChatHeader({
 }: ChatHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-    // Call-related state
+  // Local-only state
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  
- 
-  
-  const {
-    localStream,
-    remoteStream,
-    incomingCall,
-    isCalling,
-    
-    isInCall,
-    callUser,
-    acceptCall,
-    endCall,
-    rejectCall,
-    initLocalStream,
-  } = useCallSocket({ currentUserId });
 
-
-
-
-
-  
-  // Call handling functions
-  // Call handling functions
   const handleVideoCall = async () => {
-    try {
-      console.log('🎥 Starting video call...');
-      const stream = await initLocalStream({ video: true, audio: true });
-      
-      if (!stream) {
-        throw new Error('Failed to get media stream');
-      }
-      
-      console.log('✅ Media stream obtained, initiating call...');
-      console.log('📹 Stream details:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(track => ({
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState
-        }))
-      });
-         // Pass the stream directly to callUser
-      await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
-    } catch (error: any) {
-      console.error('Failed to initiate video call:', error);
-      
-      let errorMessage = 'Failed to start video call. ';
-      if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please check your camera and microphone permissions.';
-      }
-      
-      alert(errorMessage);
-    }
+    onVideoCall?.(contact.userId || '', contact.name, contact.profilePicture || contact.avatar);
   };
 
- const handleVoiceCall = async () => {
-    try {
-      console.log('🎤 Starting voice call...');
-      const stream = await initLocalStream({ video: false, audio: true });
-      
-      if (!stream) {
-        throw new Error('Failed to get media stream');
-      }
-      
-      console.log('✅ Media stream obtained, initiating call...');
-      console.log('🎤 Stream details:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(track => ({
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState
-        }))
-      });
-        // Pass the stream directly to callUser
-      await callUser(contact.userId || '', stream);
-      setIsCallModalOpen(true);
-    } catch (error: any) {
-      console.error('Failed to initiate voice call:', error);
-      
-      let errorMessage = 'Failed to start voice call. ';
-      if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please check your microphone permissions.';
-      }
-      
-      alert(errorMessage);
-    }
+  const handleVoiceCall = async () => {
+    onVoiceCall?.(contact.userId || '', contact.name, contact.profilePicture || contact.avatar);
   };
 
- const handleAcceptCall = async () => {
-    try {
-      await acceptCall();
-      setIsCallModalOpen(true);
-    } catch (error) {
-      console.error('Failed to accept call:', error);
-    }
-  };
-
-   const handleRejectCall = () => {
-  if (incomingCall) {
-    rejectCall();           // notify caller
-    setIsCallModalOpen(false);
-  }
-};
-
-
-
-  const handleEndCall = () => {
-    endCall();
-    setIsCallModalOpen(false);
-  };
-
-    const handleToggleMic = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMicOn(audioTrack.enabled);
-      }
-    }
-  };
-
-  const handleToggleVideo = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOn(videoTrack.enabled);
-      }
-    }
-  };
-
-    const handleToggleSpeaker = () => {
-    setIsSpeakerOn(!isSpeakerOn);
-    // You can implement speaker toggle logic here
-  };
-
-  // Show call modal when there's an incoming call or when in a call
   useEffect(() => {
-    if (incomingCall || isInCall) {
-      setIsCallModalOpen(true);
-    }
-  }, [incomingCall, isInCall]);
+    setIsCallModalOpen(false);
+  }, [contact?.userId]);
 
   const handleLeaveGroup = async () => {
     if (onLeaveGroup && confirm("Are you sure you want to leave this group?")) {
@@ -276,22 +136,22 @@ export default function ChatHeader({
   };
 
   return (
- <div className="chat-header px-4 py-3   flex items-center justify-between h-28">
+    <div className="chat-header px-4 py-3   flex items-center justify-between h-28">
       {/* Left - Contact Info */}
       <div className="flex items-center space-x-3">
-      {contact.userId && (
-  <UserAvatar
-    userId={contact.userId}
-    name={contact.name}
-    imageUrl={contact.profilePicture || contact.avatar}
-  />
-)}
+        {contact.userId && (
+          <UserAvatar
+            userId={contact.userId}
+            name={contact.name}
+            imageUrl={contact.profilePicture || contact.avatar}
+          />
+        )}
         <div>
           <h3 className="font-medium text-[#015a4a]">{contact.name}</h3>
           <p className="text-sm text-[#4b8d81]">
             {isTyping ? "typing..." : 
-             isGroupChat ? `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}` :
-             contact.status || "Online"}
+              isGroupChat ? `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}` :
+              contact.status || "Online"}
           </p>
         </div>
       </div>
@@ -315,7 +175,7 @@ export default function ChatHeader({
         <VerticalDivider />
 
         <Tooltip title="Video Call" placement="bottom" arrow>
-           <IconButton onClick={handleVideoCall} className="hover:bg-[#00a8841a] text-red-600">
+          <IconButton onClick={handleVideoCall} className="hover:bg-[#00a8841a] text-red-600">
             <VideoCall className="!text-[#00a884]" />
           </IconButton>
         </Tooltip>
@@ -341,57 +201,36 @@ export default function ChatHeader({
 
         {/* Menu */}
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-  {isGroupChat
-    ? [
-        <MenuItem key="group-info" onClick={handleGroupInfo}>Group Info</MenuItem>,
-        canManageGroup && <MenuItem key="edit-group" onClick={handleEditGroup}>Edit Group</MenuItem>,
-        canManageGroup && <MenuItem key="add-participants" onClick={handleAddParticipants}>Add Participants</MenuItem>,
-        <MenuItem key="group-media" onClick={handleGroupMedia}>Group Media</MenuItem>,
-        <MenuItem key="select-messages" onClick={handleMenuClose}>Select messages</MenuItem>,
-        <MenuItem key="mute-notifications" onClick={handleMenuClose}>Mute notifications</MenuItem>,
-        <MenuItem key="clear-messages" onClick={handleMenuClose}>Clear messages</MenuItem>,
-        <Divider key="divider" />,
-        <MenuItem key="leave-group" onClick={handleLeaveGroup} sx={{ color: '#dc2626' }}>
-          Leave Group
-        </MenuItem>
-      ].filter(Boolean) // remove any falsey items like canManageGroup false
-    : [
-        <MenuItem key="contact-info" onClick={handleMenuClose}>Contact info</MenuItem>,
-        <MenuItem key="select-messages" onClick={handleMenuClose}>Select messages</MenuItem>,
-        <MenuItem key="mute-notifications" onClick={handleMenuClose}>Mute notifications</MenuItem>,
-        <MenuItem key="clear-messages" onClick={handleMenuClose}>Clear messages</MenuItem>,
-        <MenuItem key="delete-chat" onClick={handleMenuClose}>Delete chat</MenuItem>,
-      ]
-  }
-</Menu>
+          {isGroupChat
+            ? [
+                <MenuItem key="group-info" onClick={handleGroupInfo}>Group Info</MenuItem>,
+                canManageGroup && <MenuItem key="edit-group" onClick={handleEditGroup}>Edit Group</MenuItem>,
+                canManageGroup && <MenuItem key="add-participants" onClick={handleAddParticipants}>Add Participants</MenuItem>,
+                <MenuItem key="group-media" onClick={handleGroupMedia}>Group Media</MenuItem>,
+                <MenuItem key="select-messages" onClick={handleMenuClose}>Select messages</MenuItem>,
+                <MenuItem key="mute-notifications" onClick={handleMenuClose}>Mute notifications</MenuItem>,
+                <MenuItem key="clear-messages" onClick={handleMenuClose}>Clear messages</MenuItem>,
+                <Divider key="divider" />,
+                <MenuItem key="leave-group" onClick={handleLeaveGroup} sx={{ color: '#dc2626' }}>
+                  Leave Group
+                </MenuItem>
+              ].filter(Boolean)
+            : [
+                <MenuItem key="contact-info" onClick={handleMenuClose}>Contact info</MenuItem>,
+                <MenuItem key="select-messages" onClick={handleMenuClose}>Select messages</MenuItem>,
+                <MenuItem key="mute-notifications" onClick={handleMenuClose}>Mute notifications</MenuItem>,
+                <MenuItem key="clear-messages" onClick={handleMenuClose}>Clear messages</MenuItem>,
+                <MenuItem key="delete-chat" onClick={handleMenuClose}>Delete chat</MenuItem>,
+              ]
+          }
+        </Menu>
 
       </div>
-        {/* Call Modal */}
-      <CallModal
-        open={isCallModalOpen}
-        onClose={() => setIsCallModalOpen(false)}
-        incomingCall={incomingCall}
-        localStream={localStream}
-        remoteStream={remoteStream}
-        isIncoming={!!incomingCall}
-        isInCall={isInCall}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-        onEndCall={handleEndCall}
-        onToggleMic={handleToggleMic}
-        onToggleVideo={handleToggleVideo}
-        onToggleSpeaker={handleToggleSpeaker}
-        isMicOn={isMicOn}
-        isVideoOn={isVideoOn}
-        isSpeakerOn={isSpeakerOn}
-        callerName={contact.name}
-        callerAvatar={contact.profilePicture || contact.avatar}
-      />
+      {/* Global CallModal is rendered at page level */}
     </div>
   );
 }
 
-// Reusable vertical divider between icons
 function VerticalDivider() {
   return (
     <Divider
@@ -407,5 +246,3 @@ function VerticalDivider() {
     />
   );
 }
-
-

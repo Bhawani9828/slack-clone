@@ -1,4 +1,4 @@
-// socket.service.ts - Fixed Version
+// socket.service.ts - Fixed Version with Better Call Handling
 import { io, Socket } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { ReplyMessagePayload } from '@/types/chatTypes';
@@ -20,7 +20,7 @@ class SocketService {
     this.currentUserId = userId;
   }
 
-    setupMessageListeners(callbacks: {
+  setupMessageListeners(callbacks: {
     onMessage: (msg: any) => void;
     onTyping: (data: any) => void;
     onUserStatus: (data: any) => void;
@@ -39,7 +39,7 @@ class SocketService {
     this.socket.off('userOnline');
     this.socket.off('userOffline');
     this.socket.off('lastMessage');
-      this.socket.off('messageDeleted');
+    this.socket.off('messageDeleted');
     this.socket.off('messageRead');
     this.socket.off('favoriteToggled');
     this.socket.off('messageForwarded');
@@ -51,7 +51,8 @@ class SocketService {
     this.socket.on('userOnline', (userId) => callbacks.onUserStatus({ userId, isOnline: true }));
     this.socket.on('userOffline', (userId) => callbacks.onUserStatus({ userId, isOnline: false }));
     this.socket.on('lastMessage', callbacks.onLastMessage);
-      // Message action listeners
+    
+    // Message action listeners
     if (callbacks.onMessageDeleted) {
       this.socket.on('messageDeleted', callbacks.onMessageDeleted);
     }
@@ -78,19 +79,19 @@ class SocketService {
 
     // Prevent multiple connection attempts
     if (this.isConnecting) {
-      console.log('Connection already in progress...');
+      console.log('🔄 Connection already in progress...');
       return this.socket as Socket;
     }
 
     const token = Cookies.get('auth_token');
     if (!token) {
-      console.warn('No token found. Aborting socket connection.');
+      console.warn('❌ No token found. Aborting socket connection.');
       return this.socket as Socket;
     }
 
     // Check if socket is already connected and working
     if (this.socket && this.socket.connected) {
-      console.log('Socket already connected');
+      console.log('✅ Socket already connected');
       return this.socket;
     }
 
@@ -98,24 +99,25 @@ class SocketService {
 
     // Clean up existing socket before creating new one
     if (this.socket) {
+      console.log('🧹 Cleaning up existing socket...');
       this.socket.removeAllListeners();
       this.socket.disconnect();
     }
 
-    console.log('Creating new socket connection...');
+    console.log('🔌 Creating new socket connection...');
     this.socket = io(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
       auth: {
         token: `Bearer ${token}`,
-        userId: this.currentUserId, // Add userId to auth
+        userId: this.currentUserId,
       },
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: this.maxReconnectionAttempts,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'], // Add polling as fallback
-      forceNew: true, // Force new connection
-      timeout: 10000, // Add connection timeout
+      transports: ['websocket', 'polling'],
+      forceNew: true,
+      timeout: 10000,
     });
 
     this.setupSocketEventHandlers();
@@ -127,9 +129,11 @@ class SocketService {
   private setupSocketEventHandlers() {
     if (!this.socket) return;
 
-    // Debug all events (remove in production)
+    // Debug events (only for call-related events to reduce noise)
     this.socket.onAny((event, ...args) => {
-      console.log(`📡 [Socket Event] ${event}:`, args);
+      if (event.includes('call') || event.includes('ice')) {
+        console.log(`📡 [Socket Event] ${event}:`, args);
+      }
     });
 
     this.socket.on('connect', () => {
@@ -168,7 +172,7 @@ class SocketService {
       this.reconnectionAttempts++;
       
       if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
-        console.error('Max reconnection attempts reached');
+        console.error('❌ Max reconnection attempts reached');
       }
     });
 
@@ -186,7 +190,6 @@ class SocketService {
       console.error('🚨 Reconnection error:', error);
     });
 
-    // Add error handling
     this.socket.on('error', (error) => {
       console.error('🚨 Socket error:', error);
     });
@@ -211,42 +214,41 @@ class SocketService {
     return this.socket?.connected ?? false;
   }
 
-joinChannel(chatId: string) {
-  if (this.socket && this.socket.connected) {
-    // Leave any previous room to avoid duplicate messages
-    if (this.currentChatId && this.currentChatId !== chatId) {
-      this.socket.emit('leaveChat', { chatId: this.currentChatId });
-      console.log(`🚪 Left chat: ${this.currentChatId}`);
-    }
+  joinChannel(chatId: string) {
+    if (this.socket && this.socket.connected) {
+      // Leave any previous room to avoid duplicate messages
+      if (this.currentChatId && this.currentChatId !== chatId) {
+        this.socket.emit('leaveChat', { chatId: this.currentChatId });
+        console.log(`🚪 Left chat: ${this.currentChatId}`);
+      }
 
-    // Join new chat
-    this.currentChatId = chatId;
-    this.socket.emit('joinChat', {
-      userId: this.currentUserId,
-      chatId,
-    });
-    console.log(`🔗 Joined chat: ${chatId}`);
-  } else {
-    console.warn('Cannot join channel: socket not connected');
+      // Join new chat
+      this.currentChatId = chatId;
+      this.socket.emit('joinChat', {
+        userId: this.currentUserId,
+        chatId,
+      });
+      console.log(`🔗 Joined chat: ${chatId}`);
+    } else {
+      console.warn('❌ Cannot join channel: socket not connected');
+    }
   }
-}
 
   sendMessage(message: any): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
-        console.error('Socket not connected when trying to send message');
+        console.error('❌ Socket not connected when trying to send message');
         reject('Socket not connected');
         return;
       }
 
       console.log('📤 Sending message:', message);
       
-      // Allow optional clientMessageId to pass through
       const payload = { ...message };
       this.socket.emit('sendMessage', payload, (response: any) => {
         console.log('📤 Send message response:', response);
         if (response?.error) {
-          console.error('Send message error:', response.error);
+          console.error('❌ Send message error:', response.error);
           reject(response.error);
         } else {
           resolve();
@@ -263,11 +265,9 @@ joinChannel(chatId: string) {
         isTyping,
       });
     } else {
-      console.warn('Cannot send typing indicator: socket not connected');
+      console.warn('❌ Cannot send typing indicator: socket not connected');
     }
   }
-
-  
 
   markAsRead(messageId: string, senderId: string) {
     if (this.socket && this.socket.connected) {
@@ -277,71 +277,64 @@ joinChannel(chatId: string) {
         senderId,
       });
     } else {
-      console.warn('Cannot mark as read: socket not connected');
+      console.warn('❌ Cannot mark as read: socket not connected');
     }
   }
 
-
-  
-  // Message Action Methods (Socket-first with REST fallback)
-// Soft delete
-// Soft delete
-deleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!this.socket?.connected) {
-      return reject(new Error("Socket not connected"));
-    }
-
-    const onDeleted = (data: any) => {
-      if (data?.messageId === messageId) {
-        this.socket?.off("messageDeleted", onDeleted);
-        resolve();
+  // Message Action Methods
+  deleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        return reject(new Error("Socket not connected"));
       }
-    };
 
-    this.socket.on("messageDeleted", onDeleted);
+      const onDeleted = (data: any) => {
+        if (data?.messageId === messageId) {
+          this.socket?.off("messageDeleted", onDeleted);
+          resolve();
+        }
+      };
 
-    this.socket.emit("deleteMessage", {
-      messageId,
-      hard: false,
-      ...options,
+      this.socket.on("messageDeleted", onDeleted);
+
+      this.socket.emit("deleteMessage", {
+        messageId,
+        hard: false,
+        ...options,
+      });
     });
-  });
-}
+  }
 
-// Hard delete
-hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!this.socket?.connected) {
-      return reject(new Error("Socket not connected"));
-    }
-
-    const onDeleted = (data: any) => {
-      if (data?.messageId === messageId) {
-        this.socket?.off("messageDeleted", onDeleted);
-        resolve();
+  hardDeleteMessage(messageId: string, options?: DeleteOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        return reject(new Error("Socket not connected"));
       }
-    };
 
-    this.socket.on("messageDeleted", onDeleted);
+      const onDeleted = (data: any) => {
+        if (data?.messageId === messageId) {
+          this.socket?.off("messageDeleted", onDeleted);
+          resolve();
+        }
+      };
 
-    this.socket.emit("deleteMessage", {
-      messageId,
-      hard: true,
-      ...options,
+      this.socket.on("messageDeleted", onDeleted);
+
+      this.socket.emit("deleteMessage", {
+        messageId,
+        hard: true,
+        ...options,
+      });
     });
-  });
-}
+  }
 
-
-async replyToMessage(data: ReplyMessagePayload): Promise<any> {
+  async replyToMessage(data: ReplyMessagePayload): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
         this.replyToMessageViaAPI(data).then(resolve).catch(reject);
         return;
       }
 
-      // Pass through optional clientMessageId if present
       const payload = { ...data } as any;
 
       this.socket.emit('replyMessage', payload, (response: any) => {
@@ -364,7 +357,6 @@ async replyToMessage(data: ReplyMessagePayload): Promise<any> {
         return;
       }
 
-      // Pass through optional clientMessageId if present
       const payload = { ...data } as any;
 
       this.socket.emit('forwardMessage', payload, (response: any) => {
@@ -452,27 +444,26 @@ async replyToMessage(data: ReplyMessagePayload): Promise<any> {
       throw new Error('Failed to delete message');
     }
   }
-private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promise<void> {
-  const token = Cookies.get('auth_token');
-  
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/messages/hard-delete/${messageId}`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ userId }),
+
+  private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promise<void> {
+    const token = Cookies.get('auth_token');
+    
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/messages/hard-delete/${messageId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to delete message');
     }
-  );
-
-  if (!response.ok) {
-    throw new Error('Failed to delete message');
   }
-}
-
-
 
   private async replyToMessageViaAPI(data: any): Promise<any> {
     const token = Cookies.get('auth_token');
@@ -558,10 +549,6 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
     return data.messages || [];
   }
 
-  //  getSocket(): Socket | null {
-  //   return this.socket;
-  // }
-
   // Request online users list
   requestOnlineUsers() {
     if (this.socket && this.socket.connected) {
@@ -578,29 +565,110 @@ private async hardDeleteMessageViaAPI(messageId: string, userId: string): Promis
   onMessageReceived(callback: (message: any) => void) {
     if (!this.socket) return;
     
-    this.socket.off('receiveMessage'); // Remove existing listeners first
+    this.socket.off('receiveMessage');
     this.socket.on('receiveMessage', (message) => {
       console.log('📥 Message received via socket:', message);
       callback(message);
     });
   }
 
+  
 
+  // Call-related methods with better error handling
+  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio'; fromName?: string; callId?: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('📞 Initiating call via socket:', data);
+      this.socket.emit('call-user', data);
+    } else {
+      console.warn('❌ Cannot initiate call: socket not connected');
+    }
+  }
 
-onCallMade(callback: (data: { from: string, offer: any }) => void) {
-  this.socket?.on('call-made', callback);
-}
+  acceptCall(data: { to: string; from: string; answer: any; callId?: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('✅ Accepting call via socket:', data);
+      this.socket.emit('call-accepted', data);
+    } else {
+      console.warn('❌ Cannot accept call: socket not connected');
+    }
+  }
 
-makeAnswer(targetUserId: string, answer: any) {
-  this.socket?.emit('make-answer', { targetUserId, answer });
-}
+  rejectCall(data: { to: string; from: string; callId?: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('❌ Rejecting call via socket:', data);
+      this.socket.emit('call-rejected', data);
+    } else {
+      console.warn('❌ Cannot reject call: socket not connected');
+    }
+  }
 
-onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
-  this.socket?.on('answer-made', callback);
-}
+  endCall(data: { to: string; from: string; callId?: string }) {
+    if (this.socket && this.socket.connected) {
+      console.log('📞 Ending call via socket:', data);
+      this.socket.emit('end-call', data);
+    } else {
+      console.warn('❌ Cannot end call: socket not connected');
+    }
+  }
 
+  sendIceCandidate(data: { to: string; from: string; candidate: any; callId?: string }) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit('ice-candidate', data);
+    } else {
+      console.warn('❌ Cannot send ICE candidate: socket not connected');
+    }
+  }
+  
 
+  // Improved call event listeners with proper cleanup
+  onIncomingCall(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('incoming-call');
+    this.socket.on('incoming-call', (data) => {
+      console.log('📞 Incoming call event received:', data);
+      callback(data);
+    });
+  }
 
+  onCallAccepted(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-accepted');
+    this.socket.on('call-accepted', (data) => {
+      console.log('✅ Call accepted event received:', data);
+      callback(data);
+    });
+  }
+
+  onCallRejected(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-rejected');
+    this.socket.on('call-rejected', (data) => {
+      console.log('❌ Call rejected event received:', data);
+      callback(data);
+    });
+  }
+
+  onCallEnded(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('call-ended');
+    this.socket.on('call-ended', (data) => {
+      console.log('📞 Call ended event received:', data);
+      callback(data);
+    });
+  }
+
+  onIceCandidate(callback: (data: any) => void) {
+    if (!this.socket) return;
+    
+    this.socket.off('ice-candidate');
+    this.socket.on('ice-candidate', callback);
+  }
+
+  // Other event listeners
   onMessageDelivered(callback: (data: any) => void) {
     if (!this.socket) return;
     
@@ -679,70 +747,24 @@ onAnswerMade(callback: (data: { from: string, answer: any }) => void) {
     this.socket?.off('typing', callback);
   }
 
-   // Call-related methods
-
-   
-  callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio' }) {
-    if (this.socket && this.socket.connected) {
-      console.log('📞 Initiating call:', data);
-      this.socket.emit('call-user', data);
-    } else {
-      console.warn('Cannot initiate call: socket not connected');
-    }
+  offIncomingCall(callback?: (data: any) => void) {
+    this.socket?.off('incoming-call', callback);
   }
 
-  acceptCall(data: { to: string; from: string; answer: any }) {
-    if (this.socket && this.socket.connected) {
-      console.log('✅ Accepting call:', data);
-      this.socket.emit('call-accepted', data);
-    } else {
-      console.warn('Cannot accept call: socket not connected');
-    }
+  offCallAccepted(callback?: (data: any) => void) {
+    this.socket?.off('call-accepted', callback);
   }
 
-   endCall(data: { to: string; from: string }) {
-    if (this.socket && this.socket.connected) {
-      console.log('❌ Ending call:', data);
-      this.socket.emit('end-call', data);
-    } else {
-      console.warn('Cannot end call: socket not connected');
-    }
+  offCallRejected(callback?: (data: any) => void) {
+    this.socket?.off('call-rejected', callback);
   }
 
-  sendIceCandidate(data: { to: string; candidate: any }) {
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('ice-candidate', data);
-    } else {
-      console.warn('Cannot send ICE candidate: socket not connected');
-    }
+  offCallEnded(callback?: (data: any) => void) {
+    this.socket?.off('call-ended', callback);
   }
 
-   // Call event listeners
-  onIncomingCall(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('incoming-call');
-    this.socket.on('incoming-call', callback);
-  }
-
-  onCallAccepted(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('call-accepted');
-    this.socket.on('call-accepted', callback);
-  }
-
-  onCallEnded(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('call-ended');
-    this.socket.on('call-ended', callback);
-  }
-    onIceCandidate(callback: (data: any) => void) {
-    if (!this.socket) return;
-    
-    this.socket.off('ice-candidate');
-    this.socket.on('ice-candidate', callback);
+  offIceCandidate(callback?: (data: any) => void) {
+    this.socket?.off('ice-candidate', callback);
   }
 }
 

@@ -44,7 +44,7 @@ export const playIncomingCallSound = () => {
 };
 
 // Fallback beep sound using Web Audio API
-const createFallbackBeep = () => {
+export const createFallbackBeep = () => {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
@@ -123,3 +123,6 @@ export const cleanupCallAudio = () => {
     console.warn('Error cleaning up call audio:', error);
   }
 };
+
+
+
