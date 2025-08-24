@@ -164,6 +164,39 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     }
   }, []);
 
+  const ensureSocketReady = useCallback(async () => {
+    console.log('🔌 ensureSocketReady: start');
+    let socket = socketRef.current || socketService.getSocket();
+    console.log('🔌 ensureSocketReady: have socket?', !!socket, 'connected?', !!socket?.connected);
+    if (!socket || !socket.connected) {
+      socketService.setCurrentUserId(currentUserId);
+      console.log('🔌 ensureSocketReady: connecting with userId', currentUserId);
+      socket = socketService.connect(currentUserId);
+      await new Promise<void>((resolve, reject) => {
+        if (!socket) return reject(new Error('Socket instance unavailable'));
+        if (socket.connected) {
+          console.log('🔌 ensureSocketReady: already connected');
+          return resolve();
+        }
+        const timer = setTimeout(() => {
+          socket.off('connect', onConnect);
+          console.error('⏱️ ensureSocketReady: timeout waiting for connect');
+          reject(new Error('Socket connect timeout'));
+        }, 5000);
+        const onConnect = () => {
+          console.log('✅ ensureSocketReady: connected, id=', socket!.id);
+          clearTimeout(timer);
+          socket!.off('connect', onConnect);
+          resolve();
+        };
+        socket.on('connect', onConnect);
+      });
+    }
+    socketRef.current = socket;
+    console.log('🔌 ensureSocketReady: done, socketId=', socketRef.current?.id);
+    return socket;
+  }, [currentUserId]);
+
   // Call a user
   const callUser = useCallback(async (userId: string, stream?: MediaStream, callerName?: string) => {
     console.log('📞 ===== INITIATING CALL =====');
@@ -185,9 +218,8 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
     }
 
-    if (!socketRef.current) {
-      throw new Error('Socket not connected');
-    }
+    // Ensure socket is connected instead of throwing immediately
+    await ensureSocketReady();
 
     setIsCalling(true);
     console.log('🔗 Creating peer connection for outgoing call...');
@@ -207,7 +239,8 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       };
       
       console.log('📡 Emitting call-user event:', callData);
-      socketRef.current.emit('call-user', callData);
+      socketRef.current!.emit('call-user', callData);
+      console.log('📡 call-user emitted to:', callData.to, 'from:', callData.from);
       
       console.log('✅ Call initiated successfully');
     } catch (error) {
@@ -216,7 +249,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       currentCallRef.current = {};
       throw error;
     }
-  }, [localStream, createPeerConnection, currentUserId]);
+  }, [localStream, createPeerConnection, currentUserId, ensureSocketReady]);
 
   // Accept incoming call
   const acceptCall = useCallback(async () => {
@@ -230,6 +263,9 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     console.log('📞 Call type:', incomingCall.type);
     
     try {
+      // Ensure socket is ready before proceeding
+      await ensureSocketReady();
+
       // Initialize local stream for the receiver
       const constraints = {
         video: incomingCall.type === 'video',
@@ -266,6 +302,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         from: currentUserId,
         answer,
       });
+      console.log('📡 call-accepted emitted to:', incomingCall.from, 'from:', currentUserId);
 
       // Clear incoming call state but keep call modal open
       setIncomingCall(null);
@@ -277,7 +314,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIncomingCall(null);
       currentCallRef.current = {};
     }
-  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId]);
+  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId, ensureSocketReady]);
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
@@ -352,7 +389,13 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       return;
     }
 
-    const socket = socketService.getSocket();
+    // Ensure we have a connected socket before registering listeners
+    let socket = socketService.getSocket();
+    if (!socket || !socket.connected) {
+      console.log('🔌 No active socket for calls. Connecting...');
+      socket = socketService.connect(currentUserId);
+    }
+
     if (!socket) {
       console.warn('⚠️ No socket connection available for calls');
       return;
@@ -366,38 +409,25 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     // Listen for incoming calls
     const handleIncomingCall = (data: any) => {
       console.log('📞 ===== INCOMING CALL RECEIVED =====');
-      console.log('📞 Call data received:', data);
-      console.log('📞 From:', data.from);
-      console.log('📞 From Name:', data.fromName);
-      console.log('📞 Type:', data.type);
-      console.log('📞 Current User ID:', currentUserId);
-      
-      // Don't accept call from yourself
-      if (data.from === currentUserId) {
-        console.warn('⚠️ Ignoring call from self');
+      console.log('📞 incoming-call payload:', data);
+      if (data.from === currentUserId || !data.offer) {
+        console.warn('📞 incoming-call ignored: from self or missing offer');
         return;
       }
-
-      // Check if offer exists
-      if (!data.offer) {
-        console.error('❌ No offer in incoming call data');
-        return;
-      }
-
-      console.log('✅ Setting incoming call state...');
+      currentCallRef.current.callId = data.callId;
       setIncomingCall({
         from: data.from,
         type: data.type,
         offer: data.offer,
         fromName: data.fromName,
       });
-      
-      console.log('✅ Incoming call state updated - modal should open now!');
+      console.log('📞 incoming-call state set; modal should open');
     };
 
     // Listen for call accepted
     const handleCallAccepted = async (data: any) => {
-      console.log('✅ ===== CALL ACCEPTED =====');
+      console.log('✅ call-accepted received:', data);
+      if (data?.callId && data.callId !== currentCallRef.current.callId) return;
       console.log('✅ Call accepted by:', data.from);
       console.log('✅ Answer received:', !!data.answer);
       
@@ -417,28 +447,26 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     };
 
     // Listen for call rejected
-    const handleCallRejected = (data: any) => {
-      console.log('❌ ===== CALL REJECTED =====');
+    const handleCallRejected = () => {
+      console.log('❌ call-rejected received');
       console.log('❌ Call rejected by:', data.from);
       setIsCalling(false);
       setIsInCall(false);
       setIncomingCall(null);
       currentCallRef.current = {};
-      
-      // You might want to show a notification here
       console.log('📱 Call was rejected by the user');
     };
 
     // Listen for call ended
     const handleCallEnded = (data: any) => {
-      console.log('📞 ===== CALL ENDED BY REMOTE =====');
+      console.log('📞 call-ended received:', data);
       console.log('📞 Call ended by:', data.from);
       endCall();
     };
 
     // Listen for ICE candidates
     const handleIceCandidate = async (data: any) => {
-      console.log('🧊 ===== ICE CANDIDATE RECEIVED =====');
+      console.log('🧊 ice-candidate received:', !!data?.candidate);
       console.log('🧊 ICE candidate received from:', data.from);
       console.log('🧊 Candidate:', data.candidate);
       
@@ -479,6 +507,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     socket.on('ice-candidate', handleIceCandidate);
     socket.on('call-failed', handleCallFailed);
     socket.on('call-initiated', handleCallInitiated);
+    console.log('✅ Call listeners registered on socket:', socket.id);
 
     console.log('✅ All call event listeners registered');
 
