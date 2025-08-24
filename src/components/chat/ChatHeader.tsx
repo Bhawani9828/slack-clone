@@ -99,6 +99,7 @@ export default function ChatHeader({
     endCall,
     rejectCall,
     initLocalStream,
+    currentCallType,
   } = useCallSocket({ currentUserId });
 
 
@@ -232,6 +233,24 @@ export default function ChatHeader({
       setIsCallModalOpen(true);
     }
   }, [incomingCall, isInCall]);
+
+  // Update video and mic state when local stream changes
+  useEffect(() => {
+    if (localStream) {
+      const videoTracks = localStream.getVideoTracks();
+      const audioTracks = localStream.getAudioTracks();
+      
+      if (videoTracks.length > 0) {
+        setIsVideoOn(videoTracks[0].enabled);
+        console.log('🎥 Video track state updated:', videoTracks[0].enabled);
+      }
+      
+      if (audioTracks.length > 0) {
+        setIsMicOn(audioTracks[0].enabled);
+        console.log('🎤 Audio track state updated:', audioTracks[0].enabled);
+      }
+    }
+  }, [localStream]);
 
   const handleLeaveGroup = async () => {
     if (onLeaveGroup && confirm("Are you sure you want to leave this group?")) {
@@ -386,6 +405,7 @@ export default function ChatHeader({
         isSpeakerOn={isSpeakerOn}
         callerName={contact.name}
         callerAvatar={contact.profilePicture || contact.avatar}
+        callType={currentCallType}
       />
     </div>
   );

@@ -33,6 +33,8 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     fromName?: string;
   } | null>(null);
 
+  const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
+
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<any>(null);
   const endCallRef = useRef<() => void>(() => {});
@@ -173,16 +175,29 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     console.log('📞 Stream provided:', !!stream);
     
     // Store call info for reference
+    const callType = stream && stream.getVideoTracks().length > 0 ? 'video' : 'audio';
     currentCallRef.current = {
       targetUserId: userId,
-      type: stream && stream.getVideoTracks().length > 0 ? 'video' : 'audio',
+      type: callType,
     };
+    setCurrentCallType(callType);
     
     // Use the passed stream if available, otherwise use the state
     const streamToUse = stream || localStream;
     
     if (!streamToUse) {
       throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
+    }
+    
+    // Ensure video tracks are enabled for video calls
+    if (callType === 'video') {
+      const videoTracks = streamToUse.getVideoTracks();
+      if (videoTracks.length > 0) {
+        videoTracks.forEach(track => {
+          track.enabled = true;
+          console.log('✅ Video track enabled for outgoing call:', track.id);
+        });
+      }
     }
 
     if (!socketRef.current) {
@@ -241,12 +256,24 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       if (!stream) {
         throw new Error('Failed to initialize local stream');
       }
+      
+      // Ensure video tracks are enabled for video calls
+      if (incomingCall.type === 'video') {
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length > 0) {
+          videoTracks.forEach(track => {
+            track.enabled = true;
+            console.log('✅ Video track enabled:', track.id);
+          });
+        }
+      }
 
       // Store call info
       currentCallRef.current = {
         targetUserId: incomingCall.from,
         type: incomingCall.type,
       };
+      setCurrentCallType(incomingCall.type);
 
       setIsInCall(true);
       
@@ -270,13 +297,21 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       // Clear incoming call state but keep call modal open
       setIncomingCall(null);
       console.log('✅ Call accepted successfully');
-      
-    } catch (error) {
-      console.error('❌ Error accepting call:', error);
-      setIsInCall(false);
-      setIncomingCall(null);
-      currentCallRef.current = {};
-    }
+      console.log('📊 Call state after acceptance:', {
+        currentCallType,
+        isInCall: true,
+        hasLocalStream: !!stream,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length
+      });
+    
+  } catch (error) {
+    console.error('❌ Error accepting call:', error);
+    setIsInCall(false);
+    setIncomingCall(null);
+    setCurrentCallType(null);
+    currentCallRef.current = {};
+  }
   }, [incomingCall, initLocalStream, createPeerConnection, currentUserId]);
 
   // Reject incoming call
@@ -294,6 +329,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
     // Clear incoming call state
     setIncomingCall(null);
+    setCurrentCallType(null);
     currentCallRef.current = {};
     console.log('✅ Call rejected successfully');
   }, [incomingCall, currentUserId]);
@@ -340,6 +376,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     setIsCalling(false);
     setIsInCall(false);
     setIncomingCall(null);
+    setCurrentCallType(null);
     currentCallRef.current = {};
     
     console.log('✅ Call ended successfully');
@@ -423,6 +460,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIsCalling(false);
       setIsInCall(false);
       setIncomingCall(null);
+      setCurrentCallType(null);
       currentCallRef.current = {};
       
       // You might want to show a notification here
@@ -504,10 +542,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     console.log('📊 ===== CALL STATE CHANGED =====');
     console.log('📊 isCalling:', isCalling);
     console.log('📊 isInCall:', isInCall);
+    console.log('📊 currentCallType:', currentCallType);
     console.log('📊 incomingCall:', incomingCall ? `from ${incomingCall.from} (${incomingCall.type})` : 'none');
     console.log('📊 localStream:', localStream ? `${localStream.id} (${localStream.getTracks().length} tracks)` : 'none');
     console.log('📊 remoteStream:', remoteStream ? `${remoteStream.id} (${remoteStream.getTracks().length} tracks)` : 'none');
-  }, [isCalling, isInCall, incomingCall, localStream, remoteStream]);
+  }, [isCalling, isInCall, currentCallType, incomingCall, localStream, remoteStream]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -528,6 +567,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     rejectCall,
     endCall,
     initLocalStream,
+    currentCallType,
     // Debug info
     debugInfo: {
       currentUserId,
