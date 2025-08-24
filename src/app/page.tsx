@@ -9,6 +9,7 @@ import DetailedContactInfo from "@/components/chat/DetailedContactInfo";
 import { socketService } from "@/lib/socket";
 import { useGroupChat } from "@/hooks/useGroupChat"; // Add this import
 import type { RootState } from '@/lib/store/index';
+import { useCallSocket } from "@/hooks/useCallSocket";
 
 import {
   setActiveView,
@@ -64,6 +65,7 @@ export default function HomePage() {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
   // Get current group ID for the hook
   const currentGroupId = selectedGroup?.id || "";
 
@@ -103,10 +105,71 @@ export default function HomePage() {
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
 
-  
+  // ✅ Global call socket (for when chat screen isn't open)
+  const {
+    localStream,
+    remoteStream,
+    incomingCall,
+    isCalling,
+    isInCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+  } = useCallSocket({ currentUserId });
 
-  
+  // Open modal when incoming call or in-call, but only globally
+  useEffect(() => {
+    if (incomingCall || isInCall) {
+      setIsCallModalOpen(true);
+    }
+  }, [incomingCall, isInCall]);
 
+  // Global call handlers
+  const handleAcceptCall = async () => {
+    try {
+      await acceptCall();
+      setIsCallModalOpen(true);
+    } catch (e) {
+      console.error('Failed to accept call globally:', e);
+    }
+  };
+
+  const handleRejectCall = () => {
+    if (incomingCall) {
+      rejectCall();
+      setIsCallModalOpen(false);
+    }
+  };
+
+  const handleEndCall = () => {
+    endCall();
+    setIsCallModalOpen(false);
+  };
+
+  const handleToggleMic = () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMicOn(audioTrack.enabled);
+      }
+    }
+  };
+
+  const handleToggleVideo = () => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOn(videoTrack.enabled);
+      }
+    }
+  };
+
+  const handleToggleSpeaker = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+  };
+  // ✅ Initialize current user
   useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
     const userName = localStorage.getItem("currentUserName") || "Current User";
@@ -157,7 +220,7 @@ export default function HomePage() {
     });
   }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
 
-   // Auto-open the most recent/last-opened group when switching to group tab
+  // Auto-open the most recent/last-opened group when switching to group tab
   useEffect(() => {
     if (chatType !== "group" || selectedGroup) return;
 
@@ -177,7 +240,7 @@ export default function HomePage() {
       target = sorted[0];
     }
 
-     if (target) {
+    if (target) {
       const chatGroup: ChatGroup = {
         id: (target as any)._id || (target as any).id,
         _id: (target as any)._id || (target as any).id,
@@ -191,7 +254,7 @@ export default function HomePage() {
   }, [chatType, groups, selectedGroup]);
 
 
- // Auto-open the most recent/last-opened direct chat when switching to direct tab
+  // Auto-open the most recent/last-opened direct chat when switching to direct tab
   useEffect(() => {
     if (chatType !== "direct" || selectedUser) return;
 
@@ -230,51 +293,49 @@ export default function HomePage() {
   };
 
   // ✅ Enhanced group select handler with group chat initialization
-const handleGroupSelect = (group: ChatGroup) => {
-  // Don't generate temp IDs! Use the actual group ID from database
-  if (!group.id && !group._id) {
-    console.error("❌ Group has no valid ID:", group);
-    alert("Invalid group selected. Please try again.");
-    return;
-  }
+  const handleGroupSelect = (group: ChatGroup) => {
+    // Don't generate temp IDs! Use the actual group ID from database
+    if (!group.id && !group._id) {
+      console.error("❌ Group has no valid ID:", group);
+      alert("Invalid group selected. Please try again.");
+      return;
+    }
 
-  const groupId = (group.id || group._id)!;
-  
-  // Validate it's a proper ObjectId format
-  if (!isValidObjectId(groupId)) {
-    console.error("❌ Invalid group ID format:", groupId);
-    alert("Invalid group ID format. Please contact support.");
-    return;
-  }
+    const groupId = (group.id || group._id)!;
+    
+    // Validate it's a proper ObjectId format
+    if (!isValidObjectId(groupId)) {
+      console.error("❌ Invalid group ID format:", groupId);
+      alert("Invalid group ID format. Please contact support.");
+      return;
+    }
 
-  console.log("✅ Selecting group with valid ID:", groupId);
-  
-  dispatch(
-  setSelectedGroup({
-    ...group,
-    id: groupId,
-    members: group.members ?? [], 
-  })
-);
-  dispatch(setChatType("group"));
-  localStorage.setItem("lastSelectedGroupId", groupId);
-};
+    console.log("✅ Selecting group with valid ID:", groupId);
+    
+    dispatch(
+      setSelectedGroup({
+        ...group,
+        id: groupId,
+        members: group.members ?? [], 
+      })
+    );
+    dispatch(setChatType("group"));
+    localStorage.setItem("lastSelectedGroupId", groupId);
+  };
 
-// Helper function to validate MongoDB ObjectId
-const isValidObjectId = (id: string): boolean => {
-  return /^[0-9a-fA-F]{24}$/.test(id);
-};
-
-
+  // Helper function to validate MongoDB ObjectId
+  const isValidObjectId = (id: string): boolean => {
+    return /^[0-9a-fA-F]{24}$/.test(id);
+  };
 
   // ✅ Group message handlers
- const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
+  const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
     
-   if (!selectedGroup?.id || !msg.content.trim()) return;
+    if (!selectedGroup?.id || !msg.content.trim()) return;
 
     try {
       await sendGroupMessage({
-         content: msg.content.trim(),
+        content: msg.content.trim(),
         type: msg.type || "text",
         fileUrl: msg.fileUrl,
         fileName: msg.fileName,
@@ -327,22 +388,22 @@ const isValidObjectId = (id: string): boolean => {
     }
   };
 
- const handleLeaveGroup = async (): Promise<boolean> => {
-  if (selectedGroup?.id) {
-    try {
-      const success = await leaveGroup();
-      if (success) {
-        dispatch(setSelectedGroup(null));
-        dispatch(setChatType("direct"));
+  const handleLeaveGroup = async (): Promise<boolean> => {
+    if (selectedGroup?.id) {
+      try {
+        const success = await leaveGroup();
+        if (success) {
+          dispatch(setSelectedGroup(null));
+          dispatch(setChatType("direct"));
+        }
+        return success; // ✅ return boolean
+      } catch (error) {
+        console.error("Failed to leave group:", error);
+        return false;   // ✅ always return a boolean
       }
-      return success; // ✅ return boolean
-    } catch (error) {
-      console.error("Failed to leave group:", error);
-      return false;   // ✅ always return a boolean
     }
-  }
-  return false; // ✅ fallback
-};
+    return false; // ✅ fallback
+  };
 
   const handleNavClick = (section: string, userId?: string) => {
     switch (section) {
@@ -607,6 +668,27 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
+        {/* ✅ Global Call Modal - only when no chat screen is open to avoid duplicates */}
+        <CallModal
+          open={isCallModalOpen && !(selectedUser || selectedGroup)}
+          onClose={() => setIsCallModalOpen(false)}
+          incomingCall={incomingCall}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isIncoming={!!incomingCall}
+          isInCall={isInCall}
+          onAccept={handleAcceptCall}
+          onReject={handleRejectCall}
+          onEndCall={handleEndCall}
+          onToggleMic={handleToggleMic}
+          onToggleVideo={handleToggleVideo}
+          onToggleSpeaker={handleToggleSpeaker}
+          isMicOn={isMicOn}
+          isVideoOn={isVideoOn}
+          isSpeakerOn={isSpeakerOn}
+          callerName={incomingCall?.fromName || "Unknown Caller"}
+          callerAvatar={undefined}
+        />
       
       </div>
     </>
