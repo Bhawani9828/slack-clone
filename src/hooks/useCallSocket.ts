@@ -41,6 +41,17 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     type?: 'video' | 'audio';
   }>({});
 
+  // Helper function to determine if a stream is video-enabled
+  const isVideoStream = useCallback((stream: MediaStream): boolean => {
+    const videoTracks = stream.getVideoTracks();
+    return videoTracks.length > 0 && videoTracks.some(track => track.enabled && track.readyState === 'live');
+  }, []);
+
+  // Helper function to get call type from stream
+  const getCallTypeFromStream = useCallback((stream: MediaStream): 'video' | 'audio' => {
+    return isVideoStream(stream) ? 'video' : 'audio';
+  }, [isVideoStream]);
+
   // Initialize WebRTC peer connection
   const createPeerConnection = useCallback((stream?: MediaStream) => {
     console.log('🔗 Creating new peer connection...');
@@ -59,8 +70,20 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     if (streamToUse) {
       console.log('🔗 Adding tracks to peer connection:', streamToUse.getTracks().length);
       streamToUse.getTracks().forEach(track => {
-        console.log('📡 Adding track:', { kind: track.kind, enabled: track.enabled });
-        pc.addTrack(track, streamToUse);
+        console.log('📡 Adding track:', { 
+          kind: track.kind, 
+          enabled: track.enabled,
+          readyState: track.readyState,
+          settings: track.getSettings()
+        });
+        
+        // Ensure track is enabled before adding
+        if (track.readyState === 'live') {
+          pc.addTrack(track, streamToUse);
+          console.log('✅ Track added successfully:', track.kind);
+        } else {
+          console.warn('⚠️ Track not ready, skipping:', track.kind, track.readyState);
+        }
       });
     } else {
       console.warn('⚠️ No stream available for peer connection');
@@ -69,9 +92,21 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     // Handle incoming remote stream
     pc.ontrack = (event) => {
       console.log('📥 Remote track received:', event.track.kind);
+      console.log('📥 Track details:', {
+        kind: event.track.kind,
+        enabled: event.track.enabled,
+        readyState: event.track.readyState
+      });
+      
       if (event.streams && event.streams[0]) {
         console.log('📥 Setting remote stream:', event.streams[0].id);
+        console.log('📥 Remote stream tracks:', event.streams[0].getTracks().map(t => t.kind));
         setRemoteStream(event.streams[0]);
+      } else if (event.track) {
+        // Handle single track if no stream
+        console.log('📥 Creating remote stream from single track');
+        const remoteStream = new MediaStream([event.track]);
+        setRemoteStream(remoteStream);
       }
     };
 
@@ -103,6 +138,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       console.log('🧊 ICE connection state changed:', pc.iceConnectionState);
     };
 
+    // Monitor track events
+    pc.onsender = (event) => {
+      console.log('📤 Sender created:', event.sender.track?.kind);
+    };
+
     peerConnectionRef.current = pc;
     return pc;
   }, [localStream, incomingCall, currentUserId]);
@@ -122,16 +162,53 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         throw new Error('MediaDevices API requires HTTPS or localhost for security reasons');
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Enhanced video constraints for better compatibility
+      const enhancedConstraints: MediaStreamConstraints = {
+        audio: constraints.audio,
+        video: constraints.video ? {
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { ideal: 30, min: 15 },
+          facingMode: 'user'
+        } : false
+      };
+
+      console.log('🎥 Enhanced constraints:', enhancedConstraints);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(enhancedConstraints);
       console.log('✅ Media stream obtained successfully:', stream.id);
       console.log('📹 Stream details:', {
         id: stream.id,
         tracks: stream.getTracks().map(track => ({
           kind: track.kind,
           enabled: track.enabled,
-          readyState: track.readyState
+          readyState: track.readyState,
+          settings: track.getSettings()
         }))
       });
+      
+      // Verify video track if video was requested
+      if (constraints.video) {
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length === 0) {
+          console.warn('⚠️ Video was requested but no video track found');
+          // Try to get video again with simpler constraints
+          try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { width: 640, height: 480 } 
+            });
+            const newVideoTrack = videoStream.getVideoTracks()[0];
+            if (newVideoTrack) {
+              stream.addTrack(newVideoTrack);
+              console.log('✅ Added video track with fallback constraints');
+            }
+          } catch (videoError) {
+            console.warn('⚠️ Could not get video track with fallback constraints:', videoError);
+          }
+        } else {
+          console.log('✅ Video track confirmed:', videoTracks[0].getSettings());
+        }
+      }
       
       // Set the stream in state
       setLocalStream(stream);
@@ -172,18 +249,22 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     console.log('📞 Current userId:', currentUserId);
     console.log('📞 Stream provided:', !!stream);
     
-    // Store call info for reference
-    currentCallRef.current = {
-      targetUserId: userId,
-      type: stream && stream.getVideoTracks().length > 0 ? 'video' : 'audio',
-    };
-    
     // Use the passed stream if available, otherwise use the state
     const streamToUse = stream || localStream;
     
     if (!streamToUse) {
       throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
     }
+
+    // Determine call type from stream
+    const callType = getCallTypeFromStream(streamToUse);
+    console.log('📞 Determined call type:', callType);
+    
+    // Store call info for reference
+    currentCallRef.current = {
+      targetUserId: userId,
+      type: callType,
+    };
 
     if (!socketRef.current) {
       throw new Error('Socket not connected');
@@ -203,7 +284,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         from: currentUserId,
         fromName: callerName || 'Unknown Caller',
         offer,
-        type: streamToUse.getVideoTracks().length > 0 ? 'video' : 'audio',
+        type: callType,
       };
       
       console.log('📡 Emitting call-user event:', callData);
@@ -216,7 +297,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       currentCallRef.current = {};
       throw error;
     }
-  }, [localStream, createPeerConnection, currentUserId]);
+  }, [localStream, createPeerConnection, currentUserId, getCallTypeFromStream]);
 
   // Accept incoming call
   const acceptCall = useCallback(async () => {
@@ -236,10 +317,39 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         audio: true
       };
       
-      console.log('🎥 Getting media stream for call acceptance...');
+      console.log('🎥 Getting media stream for call acceptance with constraints:', constraints);
+      
+      // First, stop any existing streams to free up devices
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          track.stop();
+          console.log('🔇 Stopped existing track:', track.kind);
+        });
+        setLocalStream(null);
+      }
+      
       const stream = await initLocalStream(constraints);
       if (!stream) {
         throw new Error('Failed to initialize local stream');
+      }
+
+      // Verify we have the required tracks
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      
+      console.log('📊 Stream verification:', {
+        audioTracks: audioTracks.length,
+        videoTracks: videoTracks.length,
+        requestedVideo: incomingCall.type === 'video'
+      });
+
+      if (audioTracks.length === 0) {
+        throw new Error('No audio track available. Microphone access required.');
+      }
+
+      if (incomingCall.type === 'video' && videoTracks.length === 0) {
+        console.warn('⚠️ Video call requested but no video track available');
+        // Continue with audio-only call
       }
 
       // Store call info
@@ -276,8 +386,24 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIsInCall(false);
       setIncomingCall(null);
       currentCallRef.current = {};
+      
+      // Show user-friendly error message
+      let errorMessage = 'Failed to accept call: Unknown error';
+      if (error instanceof Error) {
+        if (error.message.includes('permission')) {
+          errorMessage = 'Camera/microphone permission denied. Please allow access and try again.';
+        } else if (error.message.includes('NotFoundError')) {
+          errorMessage = 'Camera/microphone not found. Please connect the required devices.';
+        } else if (error.message.includes('NotReadableError')) {
+          errorMessage = 'Camera/microphone is in use by another application. Please close other apps and try again.';
+        } else {
+          errorMessage = `Failed to accept call: ${error.message}`;
+        }
+      }
+      
+      alert(errorMessage);
     }
-  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId]);
+  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId, localStream]);
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
@@ -517,6 +643,53 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     };
   }, [endCall]);
 
+  // Debug function to check media devices
+  const debugMediaDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      const audioDevices = devices.filter(device => device.kind === 'audioinput');
+      
+      console.log('🔍 Media Devices Debug:', {
+        videoDevices: videoDevices.map(d => ({ id: d.deviceId, label: d.label })),
+        audioDevices: audioDevices.map(d => ({ id: d.deviceId, label: d.label })),
+        hasVideo: videoDevices.length > 0,
+        hasAudio: audioDevices.length > 0
+      });
+      
+      return { videoDevices, audioDevices };
+    } catch (error) {
+      console.error('❌ Error enumerating devices:', error);
+      return { videoDevices: [], audioDevices: [] };
+    }
+  }, []);
+
+  // Debug function to check current streams
+  const debugCurrentStreams = useCallback(() => {
+    console.log('🔍 Current Streams Debug:', {
+      localStream: localStream ? {
+        id: localStream.id,
+        tracks: localStream.getTracks().map(t => ({
+          kind: t.kind,
+          enabled: t.enabled,
+          readyState: t.readyState
+        }))
+      } : null,
+      remoteStream: remoteStream ? {
+        id: remoteStream.id,
+        tracks: remoteStream.getTracks().map(t => ({
+          kind: t.kind,
+          enabled: t.enabled,
+          readyState: t.readyState
+        }))
+      } : null,
+      peerConnection: peerConnectionRef.current ? {
+        connectionState: peerConnectionRef.current.connectionState,
+        iceConnectionState: peerConnectionRef.current.iceConnectionState
+      } : null
+    });
+  }, [localStream, remoteStream]);
+
   return {
     localStream,
     remoteStream,
@@ -528,11 +701,9 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     rejectCall,
     endCall,
     initLocalStream,
-    // Debug info
-    debugInfo: {
-      currentUserId,
-      socketConnected: !!socketRef.current?.connected,
-      currentCall: currentCallRef.current,
-    }
+    debugMediaDevices,
+    debugCurrentStreams,
+    isVideoStream,
+    getCallTypeFromStream,
   };
 };

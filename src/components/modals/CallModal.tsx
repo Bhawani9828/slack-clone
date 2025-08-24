@@ -70,16 +70,45 @@ export default function CallModal({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
+  // Debug logging for streams
+  useEffect(() => {
+    console.log('🎥 CallModal Stream Debug:', {
+      localStream: !!localStream,
+      remoteStream: !!remoteStream,
+      localTracks: localStream?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })) || [],
+      remoteTracks: remoteStream?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })) || [],
+      isInCall,
+      isIncoming
+    });
+  }, [localStream, remoteStream, isInCall, isIncoming]);
 
-   useEffect(() => {
+  useEffect(() => {
     if (localVideoRef.current && localStream) {
+      console.log('🎥 Setting local video stream');
       localVideoRef.current.srcObject = localStream;
+      
+      // Ensure video plays
+      localVideoRef.current.onloadedmetadata = () => {
+        console.log('🎥 Local video metadata loaded');
+        localVideoRef.current?.play().catch(e => {
+          console.warn('⚠️ Could not autoplay local video:', e);
+        });
+      };
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
+      console.log('🎥 Setting remote video stream');
       remoteVideoRef.current.srcObject = remoteStream;
+      
+      // Ensure video plays
+      remoteVideoRef.current.onloadedmetadata = () => {
+        console.log('🎥 Remote video metadata loaded');
+        remoteVideoRef.current?.play().catch(e => {
+          console.warn('⚠️ Could not autoplay remote video:', e);
+        });
+      };
     }
   }, [remoteStream]);
 

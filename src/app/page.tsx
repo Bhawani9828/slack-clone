@@ -23,6 +23,7 @@ import {
 } from '@/lib/store/slices/sidebarSlice';
 import LeftNavigation from "@/components/layout/LeftNavigation";
 import { ChatGroup } from "@/types/chatTypes";
+import { useCallSocket } from "@/hooks/useCallSocket"; // Add this import
 
 interface ChatUser {
   id: string;
@@ -64,8 +65,15 @@ export default function HomePage() {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  // Get current group ID for the hook
+  const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
   const currentGroupId = selectedGroup?.id || "";
+
+  // Determine if call modal should be open
+  const isCallModalOpen = Boolean(
+    incomingCall || // There's an incoming call
+    (isInCall && (localStream || remoteStream)) || // We're in a call with streams
+    (isCalling && localStream) // We're calling and have local stream
+  );
 
   // ✅ Initialize group chat hook
   const {
@@ -102,6 +110,61 @@ export default function HomePage() {
     unreadCount,
     hasUnreadMessages,
   } = useGroupChat(currentGroupId, currentUserId);
+
+  // Global call hook
+ const {
+  localStream,
+  remoteStream,
+  incomingCall,
+  isCalling,
+  isInCall,
+  callUser,
+  acceptCall,
+  rejectCall,
+  endCall,
+  initLocalStream,
+  debugMediaDevices,
+  debugCurrentStreams,
+  isVideoStream,
+  getCallTypeFromStream,
+} = useCallSocket({ currentUserId });
+
+  // Debug function to help troubleshoot video call issues
+  const debugVideoCall = async () => {
+    console.log('🔍 ===== VIDEO CALL DEBUG =====');
+    
+    // Check media devices
+    const devices = await debugMediaDevices();
+    console.log('📱 Available devices:', devices);
+    
+    // Check current streams
+    debugCurrentStreams();
+    
+    // Check if we're in a call
+    console.log('📞 Call state:', {
+      isCalling,
+      isInCall,
+      hasIncomingCall: !!incomingCall,
+      localStream: !!localStream,
+      remoteStream: !!remoteStream
+    });
+    
+    // Try to get a test stream
+    try {
+      console.log('🎥 Testing video stream...');
+      const testStream = await initLocalStream({ video: true, audio: true });
+      console.log('✅ Test stream obtained:', {
+        id: testStream?.id,
+        tracks: testStream?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled }))
+      });
+      
+      // Stop the test stream
+      testStream?.getTracks().forEach(track => track.stop());
+      console.log('🔇 Test stream stopped');
+    } catch (error) {
+      console.error('❌ Test stream failed:', error);
+    }
+  };
 
   
 
@@ -377,12 +440,100 @@ const isValidObjectId = (id: string): boolean => {
     }
   };
 
-  const handleVideoCall = () => {
-    setVideoCallModalOpen(true);
+  // Start call (global)
+  const handleVideoCall = async (userId: string, name?: string) => {
+    try {
+      console.log('🎥 Starting video call to:', userId, name);
+      
+      // Check device availability first
+      const devices = await debugMediaDevices();
+      
+      if (devices.videoDevices.length === 0) {
+        alert('No camera found. Please connect a camera and try again.');
+        return;
+      }
+      
+      if (devices.audioDevices.length === 0) {
+        alert('No microphone found. Please connect a microphone and try again.');
+        return;
+      }
+      
+      // Get media stream first
+      const stream = await initLocalStream({ video: true, audio: true });
+      if (!stream) {
+        throw new Error('Failed to get video stream');
+      }
+      
+      // Verify we have video
+      if (!isVideoStream(stream)) {
+        console.warn('⚠️ Video stream requested but no video track available');
+        const userChoice = confirm('Video camera not available. Continue with audio-only call?');
+        if (!userChoice) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+      }
+      
+      // Make the call
+      await callUser(userId, stream, name);
+      console.log('✅ Video call initiated');
+    } catch (error) {
+      console.error('❌ Video call failed:', error);
+      
+      // Type guard for media errors
+      const mediaError = error as DOMException;
+      
+      let errorMessage = 'Failed to start video call.';
+      if (mediaError.name === 'NotReadableError') {
+        errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
+      } else if (mediaError.name === 'NotAllowedError') {
+        errorMessage = 'Camera access denied. Please allow camera access and try again.';
+      } else if (mediaError.name === 'NotFoundError') {
+        errorMessage = 'No camera found. Please connect a camera and try again.';
+      }
+      
+      alert(errorMessage);
+    }
   };
 
-  const handleVoiceCall = () => {
-    console.log("Starting voice call...");
+  const handleVoiceCall = async (userId: string, name?: string) => {
+    try {
+      console.log('📞 Starting voice call to:', userId, name);
+      
+      // Check device availability first
+      const devices = await debugMediaDevices();
+      
+      if (devices.audioDevices.length === 0) {
+        alert('No microphone found. Please connect a microphone and try again.');
+        return;
+      }
+      
+      // Get media stream first
+      const stream = await initLocalStream({ video: false, audio: true });
+      if (!stream) {
+        throw new Error('Failed to get audio stream');
+      }
+      
+      // Make the call
+      await callUser(userId, stream, name);
+      console.log('✅ Voice call initiated');
+    } catch (error) {
+      console.error('❌ Voice call failed:', error);
+      
+      // Type guard for media errors
+      const mediaError = error as DOMException;
+      
+      let errorMessage = 'Failed to start voice call.';
+      if (mediaError.name === 'NotReadableError') {
+        errorMessage = 'Microphone is in use by another application. Please close other apps and try again.';
+      } else if (mediaError.name === 'NotAllowedError') {
+        errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
+      } else if (mediaError.name === 'NotFoundError') {
+        errorMessage = 'No microphone found. Please connect a microphone and try again.';
+      }
+      
+      alert(errorMessage);
+    }
   };
 
   const handleBackToChat = () => {
@@ -607,7 +758,63 @@ const isValidObjectId = (id: string): boolean => {
           </div>
         </div>
         
-      
+        {/* Global Call Modal */}
+        <CallModal
+          open={isCallModalOpen}
+          onClose={() => {
+            // Only allow closing if we're not in the middle of accepting a call
+            if (!isInCall || remoteStream) {
+              endCall();
+            }
+          }}
+          incomingCall={incomingCall}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isIncoming={!!incomingCall && !isInCall}
+          isInCall={isInCall || (isCalling && !!localStream)}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+          onEndCall={endCall}
+          onToggleMic={() => {
+            if (localStream) {
+              const track = localStream.getAudioTracks()[0];
+              if (track) {
+                track.enabled = !track.enabled;
+                setIsMicOn(track.enabled);
+              }
+            }
+          }}
+          onToggleVideo={() => {
+            if (localStream) {
+              const track = localStream.getVideoTracks()[0];
+              if (track) {
+                track.enabled = !track.enabled;
+                setIsVideoOn(track.enabled);
+              }
+            }
+          }}
+          onToggleSpeaker={() => setIsSpeakerOn(!isSpeakerOn)}
+          isMicOn={isMicOn}
+          isVideoOn={isVideoOn}
+          isSpeakerOn={isSpeakerOn}
+          callerName={incomingCall?.fromName || selectedUser?.name || 'Unknown'}
+          callerAvatar={
+            incomingCall 
+              ? undefined // You might want to fetch this based on caller ID
+              : selectedUser?.profilePicture || selectedUser?.avatar
+          }
+        />
+
+        {/* Debug Button (only in development) */}
+        {process.env.NODE_ENV === 'development' && (
+          <button
+            onClick={debugVideoCall}
+            className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+            title="Debug Video Call Issues"
+          >
+            🐛 Debug Video
+          </button>
+        )}
       </div>
     </>
   );
