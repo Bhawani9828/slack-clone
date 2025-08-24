@@ -352,7 +352,13 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       return;
     }
 
-    const socket = socketService.getSocket();
+    // Ensure we have a connected socket before registering listeners
+    let socket = socketService.getSocket();
+    if (!socket || !socket.connected) {
+      console.log('🔌 No active socket for calls. Connecting...');
+      socket = socketService.connect(currentUserId);
+    }
+
     if (!socket) {
       console.warn('⚠️ No socket connection available for calls');
       return;
@@ -424,8 +430,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIsInCall(false);
       setIncomingCall(null);
       currentCallRef.current = {};
-      
-      // You might want to show a notification here
       console.log('📱 Call was rejected by the user');
     };
 
