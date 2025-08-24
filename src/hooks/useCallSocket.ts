@@ -164,6 +164,30 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     }
   }, []);
 
+  const ensureSocketReady = useCallback(async () => {
+    let socket = socketRef.current || socketService.getSocket();
+    if (!socket || !socket.connected) {
+      socketService.setCurrentUserId(currentUserId);
+      socket = socketService.connect(currentUserId);
+      await new Promise<void>((resolve, reject) => {
+        if (!socket) return reject(new Error('Socket instance unavailable'));
+        if (socket.connected) return resolve();
+        const timer = setTimeout(() => {
+          socket.off('connect', onConnect);
+          reject(new Error('Socket connect timeout'));
+        }, 5000);
+        const onConnect = () => {
+          clearTimeout(timer);
+          socket.off('connect', onConnect);
+          resolve();
+        };
+        socket.on('connect', onConnect);
+      });
+    }
+    socketRef.current = socket;
+    return socket;
+  }, [currentUserId]);
+
   // Call a user
   const callUser = useCallback(async (userId: string, stream?: MediaStream, callerName?: string) => {
     console.log('📞 ===== INITIATING CALL =====');
@@ -185,9 +209,8 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       throw new Error('Local stream not initialized. Please ensure camera/microphone permissions are granted.');
     }
 
-    if (!socketRef.current) {
-      throw new Error('Socket not connected');
-    }
+    // Ensure socket is connected instead of throwing immediately
+    await ensureSocketReady();
 
     setIsCalling(true);
     console.log('🔗 Creating peer connection for outgoing call...');
@@ -207,7 +230,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       };
       
       console.log('📡 Emitting call-user event:', callData);
-      socketRef.current.emit('call-user', callData);
+      socketRef.current!.emit('call-user', callData);
       
       console.log('✅ Call initiated successfully');
     } catch (error) {
@@ -216,7 +239,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       currentCallRef.current = {};
       throw error;
     }
-  }, [localStream, createPeerConnection, currentUserId]);
+  }, [localStream, createPeerConnection, currentUserId, ensureSocketReady]);
 
   // Accept incoming call
   const acceptCall = useCallback(async () => {
@@ -230,6 +253,9 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     console.log('📞 Call type:', incomingCall.type);
     
     try {
+      // Ensure socket is ready before proceeding
+      await ensureSocketReady();
+
       // Initialize local stream for the receiver
       const constraints = {
         video: incomingCall.type === 'video',
@@ -277,7 +303,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIncomingCall(null);
       currentCallRef.current = {};
     }
-  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId]);
+  }, [incomingCall, initLocalStream, createPeerConnection, currentUserId, ensureSocketReady]);
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
