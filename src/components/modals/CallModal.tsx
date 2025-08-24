@@ -45,6 +45,7 @@ interface CallModalProps {
   isSpeakerOn: boolean;
   callerName: string;
   callerAvatar?: string;
+  callType?: 'video' | 'audio';
 }
 
 export default function CallModal({
@@ -66,6 +67,7 @@ export default function CallModal({
   isSpeakerOn,
   callerName,
   callerAvatar,
+  callType,
 }: CallModalProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -74,14 +76,30 @@ export default function CallModal({
    useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      console.log('🎥 Local video element updated with stream:', localStream.id);
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      console.log('📺 Remote video element updated with stream:', remoteStream.id);
     }
   }, [remoteStream]);
+
+  // Debug logging for call type
+  useEffect(() => {
+    console.log('📊 CallModal Debug:', {
+      callType,
+      incomingCallType: incomingCall?.type,
+      isIncoming,
+      isInCall,
+      hasLocalStream: !!localStream,
+      hasRemoteStream: !!remoteStream,
+      isVideoOn,
+      shouldShowVideo: (callType === 'video' || incomingCall?.type === 'video') && isVideoOn
+    });
+  }, [callType, incomingCall, isIncoming, isInCall, localStream, remoteStream, isVideoOn]);
 
   const handleAccept = () => {
     onAccept();
@@ -166,7 +184,7 @@ export default function CallModal({
           )}
 
           {/* Local Video (Picture-in-Picture) */}
-          {localStream && isVideoOn && (
+          {localStream && isVideoOn && (callType === 'video' || incomingCall?.type === 'video') && localStream.getVideoTracks().length > 0 && (
             <Box
               sx={{
                 position: 'absolute',
@@ -267,7 +285,7 @@ export default function CallModal({
               </IconButton>
 
               {/* Video Toggle (only for video calls) */}
-              {incomingCall?.type === 'video' && (
+              {(callType === 'video' || incomingCall?.type === 'video') && localStream && localStream.getVideoTracks().length > 0 && (
                 <IconButton
                   onClick={onToggleVideo}
                   sx={{
