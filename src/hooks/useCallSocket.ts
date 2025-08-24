@@ -352,7 +352,18 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       return;
     }
 
-    const socket = socketService.getSocket();
+    // Ensure socket is available and connected
+    let socket = socketService.getSocket();
+    if (!socket || !socket.connected) {
+      console.log('🔌 No active socket found for calls. Connecting now...');
+      try {
+        socketService.setCurrentUserId(currentUserId);
+        socket = socketService.connect(currentUserId);
+      } catch (err) {
+        console.error('❌ Failed to connect socket for calls:', err);
+      }
+    }
+
     if (!socket) {
       console.warn('⚠️ No socket connection available for calls');
       return;
