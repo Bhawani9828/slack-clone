@@ -1,5 +1,6 @@
 import { io, type Socket } from "socket.io-client"
 import Cookies from "js-cookie"
+import { postApi } from "@/axios/apiService"
 
 export interface GroupMessage {
   _id: string
@@ -226,33 +227,23 @@ class GroupChatSocketService {
   }
 
   async createGroupViaAPI(data: CreateGroupPayload): Promise<any> {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/groups`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: data.name.trim(),
-          description: data.description?.trim() || "",
-          participants: data.participants,
-          groupImage: data.groupImage || "",
-        }),
-      });
+  try {
+    console.log("📤 Creating group via REST API...", data);
+    
+    const result = await postApi('/groups', {
+      name: data.name.trim(),
+      description: data.description?.trim() || "",
+      participants: data.participants,
+      groupImage: data.groupImage || "",
+    });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || `Failed with status ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
-    } catch (error: any) {
-      console.error("❌ REST API error:", error);
-      throw error;
-    }
+    console.log("✅ Group created successfully:", result);
+    return result;
+  } catch (error: any) {
+    console.error("❌ REST API error:", error);
+    throw error;
   }
+}
 
   // Get user's groups
   getUserGroups(): void {
