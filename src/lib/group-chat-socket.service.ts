@@ -124,7 +124,7 @@ class GroupChatSocketService {
     console.log("🧹 Clean token (without Bearer):", cleanToken);
 
     return new Promise<Socket>((resolve, reject) => {
-      this.socket = io(`${process.env.NEXT_PUBLIC_API_URL}/group-chat`, {
+      this.socket = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}/group-chat`, {
         transports: ["websocket"],
         forceNew: true,
         auth: {

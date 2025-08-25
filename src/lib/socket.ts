@@ -105,7 +105,7 @@ class SocketService {
     }
 
     console.log('🔌 Creating new socket connection...');
-    this.socket = io(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
+    this.socket = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat`, {
       auth: {
         token: `Bearer ${token}`,
         userId: this.currentUserId,
