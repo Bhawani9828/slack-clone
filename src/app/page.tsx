@@ -24,6 +24,7 @@ import {
 import LeftNavigation from "@/components/layout/LeftNavigation";
 import { ChatGroup } from "@/types/chatTypes";
 import { useCallSocket } from "@/hooks/useCallSocket";
+import { useSnackbar } from "@/hooks/use-snackbar";
 
 interface ChatUser {
   id: string;
@@ -69,7 +70,7 @@ export default function HomePage() {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
   const currentGroupId = selectedGroup?.id || "";
-
+const { showSnackbar } = useSnackbar()
   const {
     messages: groupMessages,
     groupInfo,
@@ -279,18 +280,17 @@ export default function HomePage() {
       setShowChatOnMobile(true);
     }
   };
-
   const handleGroupSelect = (group: ChatGroup) => {
     if (!group.id && !group._id) {
       console.error("❌ Group has no valid ID:", group);
-      alert("Invalid group selected. Please try again.");
+      showSnackbar("Invalid group selected. Please try again.", "error"); // 👈 snackbar
       return;
     }
 
     const groupId = (group.id || group._id)!;
     if (!/^[0-9a-fA-F]{24}$/.test(groupId)) {
       console.error("❌ Invalid group ID format:", groupId);
-      alert("Invalid group ID format. Please contact support.");
+      showSnackbar("Invalid group ID format. Please contact support.", "error"); // 👈 snackbar
       return;
     }
 
@@ -422,94 +422,96 @@ export default function HomePage() {
   };
 
   // Call handlers (unchanged)
-  const handleVideoCall = async (userId: string, name?: string) => {
-    try {
-      console.log('🎥 Starting video call to:', userId, name);
-      
-      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        alert("Video calling is not supported in your browser or requires HTTPS");
-        setCurrentCallType(null);
-        return;
-      }
-      
-      setCurrentCallType('video');
-      
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const hasVideo = devices.some(device => device.kind === 'videoinput');
-      
-      if (!hasVideo) {
-        alert('No camera found. Please connect a camera and try again.');
-        setCurrentCallType(null);
-        return;
-      }
-      
-      const stream = await initLocalStream({ video: true, audio: true });
-      if (!stream) {
-        throw new Error('Failed to get video stream');
-      }
-      
-      await callUser(userId, stream, name);
-      console.log('✅ Video call initiated');
-    } catch (error) {
-      console.error('❌ Video call failed:', error);
-      setCurrentCallType(null);
-      
-      const mediaError = error as DOMException;
-      
-      let errorMessage = 'Failed to start video call.';
-      if (mediaError.name === 'NotReadableError') {
-        errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
-      } else if (mediaError.name === 'NotAllowedError') {
-        errorMessage = 'Camera access denied. Please allow camera access and try again.';
-      } else if (mediaError.name === 'NotFoundError') {
-        errorMessage = 'No camera found. Please connect a camera and try again.';
-      }
-      
-      alert(errorMessage);
-    }
-  };
+const handleVideoCall = async (userId: string, name?: string) => {
+  try {
+    console.log('🎥 Starting video call to:', userId, name);
 
-  const handleVoiceCall = async (userId: string, name?: string) => {
-    try {
-      console.log('📞 Starting voice call to:', userId, name);
-      
-      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        alert("Voice calling is not supported in your browser or requires HTTPS");
-        return;
-      }
-      
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const hasAudio = devices.some(device => device.kind === 'audioinput');
-      
-      if (!hasAudio) {
-        alert('No microphone found. Please connect a microphone and try again.');
-        return;
-      }
-      
-      const stream = await initLocalStream({ video: false, audio: true });
-      if (!stream) {
-        throw new Error('Failed to get audio stream');
-      }
-      
-      await callUser(userId, stream, name);
-      console.log('✅ Voice call initiated');
-    } catch (error) {
-      console.error('❌ Voice call failed:', error);
-      
-      const mediaError = error as DOMException;
-      
-      let errorMessage = 'Failed to start voice call.';
-      if (mediaError.name === 'NotReadableError') {
-        errorMessage = 'Microphone is in use by another application. Please close other apps and try again.';
-      } else if (mediaError.name === 'NotAllowedError') {
-        errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
-      } else if (mediaError.name === 'NotFoundError') {
-        errorMessage = 'No microphone found. Please connect a microphone and try again.';
-      }
-      
-      alert(errorMessage);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      showSnackbar("Video calling is not supported in your browser or requires HTTPS", "error");
+      setCurrentCallType(null);
+      return;
     }
-  };
+
+    setCurrentCallType("video");
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasVideo = devices.some(device => device.kind === "videoinput");
+
+    if (!hasVideo) {
+      showSnackbar("No camera found. Please connect a camera and try again.", "error");
+      setCurrentCallType(null);
+      return;
+    }
+
+    const stream = await initLocalStream({ video: true, audio: true });
+    if (!stream) {
+      throw new Error("Failed to get video stream");
+    }
+
+    await callUser(userId, stream, name);
+    showSnackbar("✅ Video call initiated", "success");
+  } catch (error) {
+    console.error("❌ Video call failed:", error);
+    setCurrentCallType(null);
+
+    const mediaError = error as DOMException;
+    let errorMessage = "Failed to start video call.";
+
+    if (mediaError.name === "NotReadableError") {
+      errorMessage = "Camera is in use by another app. Close other apps and try again.";
+    } else if (mediaError.name === "NotAllowedError") {
+      errorMessage = "Camera access denied. Please allow camera access.";
+    } else if (mediaError.name === "NotFoundError") {
+      errorMessage = "No camera found. Please connect a camera.";
+    }
+
+    showSnackbar(errorMessage, "error");
+  }
+};
+
+
+ const handleVoiceCall = async (userId: string, name?: string) => {
+  try {
+    console.log("📞 Starting voice call to:", userId, name);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      showSnackbar("Voice calling is not supported in your browser or requires HTTPS", "error");
+      return;
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasAudio = devices.some(device => device.kind === "audioinput");
+
+    if (!hasAudio) {
+      showSnackbar("No microphone found. Please connect one and try again.", "error");
+      return;
+    }
+
+    const stream = await initLocalStream({ video: false, audio: true });
+    if (!stream) {
+      throw new Error("Failed to get audio stream");
+    }
+
+    await callUser(userId, stream, name);
+    showSnackbar("✅ Voice call initiated", "success");
+  } catch (error) {
+    console.error("❌ Voice call failed:", error);
+
+    const mediaError = error as DOMException;
+    let errorMessage = "Failed to start voice call.";
+
+    if (mediaError.name === "NotReadableError") {
+      errorMessage = "Microphone is in use by another app. Close other apps and try again.";
+    } else if (mediaError.name === "NotAllowedError") {
+      errorMessage = "Microphone access denied. Please allow microphone access.";
+    } else if (mediaError.name === "NotFoundError") {
+      errorMessage = "No microphone found. Please connect a microphone.";
+    }
+
+    showSnackbar(errorMessage, "error");
+  }
+};
+
 
   // Call modal logic (unchanged)
   const isCallModalOpen = Boolean(

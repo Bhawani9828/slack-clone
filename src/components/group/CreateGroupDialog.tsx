@@ -25,7 +25,10 @@ import {
 import { Close, CameraAlt, GroupAdd, Person, PhotoCamera } from "@mui/icons-material"
 import { useAppSelector } from "@/lib/store"
 import groupChatSocketService from "@/lib/group-chat-socket.service"
-
+import { useSnackbar } from "@/hooks/use-snackbar"
+import { CustomSnackbar } from "../custom-snackbar"
+import useMediaQuery from "@mui/material/useMediaQuery"
+import { useTheme } from "@mui/material/styles"
 interface CreateGroupDialogProps {
   open: boolean
   onClose: () => void
@@ -45,9 +48,10 @@ export default function CreateGroupDialog({ open, onClose, onCreateGroup, isDark
   const [groupImage, setGroupImage] = useState<string>("")
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string>("")
-
+ const { snackbarState, showSnackbar, handleClose: handleSnackbarClose } = useSnackbar();
   const { chatusers, currentUser } = useAppSelector((state) => state.user)
-
+const theme = useTheme()
+const fullScreen = useMediaQuery(theme.breakpoints.down("sm"))
   useEffect(() => {
     if (!open || !currentUser?._id) return
 
@@ -142,25 +146,25 @@ export default function CreateGroupDialog({ open, onClose, onCreateGroup, isDark
       resetForm()
       onClose()
     } catch (err: any) {
-      console.error("❌ Group creation failed:", err)
-      setIsCreating(false)
+  console.error("❌ Group creation failed:", err)
+  setIsCreating(false)
 
-      let errorMessage = "Failed to create group. Please try again."
+  let errorMessage = "Failed to create group. Please try again."
 
-      if (err.message?.includes("Authentication")) {
-        errorMessage = "Authentication failed. Please log in again."
-      } else if (err.message?.includes("token")) {
-        errorMessage = "Session expired. Please refresh and try again."
-      } else if (err.message?.includes("participants")) {
-        errorMessage = "Invalid participants selected."
-      } else if (err.message?.includes("name")) {
-        errorMessage = "Group name is invalid."
-      } else if (err.message) {
-        errorMessage = err.message
-      }
+  if (err.message?.includes("Authentication")) {
+    errorMessage = "Authentication failed. Please log in again."
+  } else if (err.message?.includes("token")) {
+    errorMessage = "Session expired. Please refresh and try again."
+  } else if (err.message?.includes("participants")) {
+    errorMessage = "Invalid participants selected."
+  } else if (err.message?.includes("name")) {
+    errorMessage = "Group name is invalid."
+  } else if (err.message) {
+    errorMessage = err.message
+  }
 
-      setError(errorMessage)
-    }
+  showSnackbar(errorMessage, "error")
+}
   }
 
   const handleClose = () => {
@@ -176,6 +180,7 @@ export default function CreateGroupDialog({ open, onClose, onCreateGroup, isDark
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
+       fullScreen={fullScreen}
       TransitionComponent={Slide}
       
       PaperProps={{
@@ -620,6 +625,13 @@ export default function CreateGroupDialog({ open, onClose, onCreateGroup, isDark
           )}
         </Button>
       </DialogActions>
+
+        <CustomSnackbar
+              open={snackbarState.open}
+              message={snackbarState.message}
+              severity={snackbarState.severity}
+              onClose={handleSnackbarClose}
+            />
     </Dialog>
   )
 }

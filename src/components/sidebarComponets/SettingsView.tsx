@@ -162,7 +162,7 @@ export default function SettingsView({ isDark, onBackToChat }: SettingsViewProps
     return (
       <Box sx={{
         height: "100vh",
-        width: "320px",
+        width: "300px",
         backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
         display: "flex",
         alignItems: "center",
@@ -178,7 +178,7 @@ export default function SettingsView({ isDark, onBackToChat }: SettingsViewProps
   return (
     <Box sx={{
       height: "100vh",
-      width: "420px",
+      width: "399px",
       backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
       background: isDark 
         ? "linear-gradient(135deg, #1e1e2e 0%, #181825 100%)"

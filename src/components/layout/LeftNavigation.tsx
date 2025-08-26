@@ -8,9 +8,10 @@ import {
   DarkMode,
   Logout,
   ContactEmergencyOutlined,
+  ChevronLeft
 } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
-import { setActiveView } from "@/lib/store/slices/sidebarSlice";
+import { setActiveView,setIsLeftNavOpen } from "@/lib/store/slices/sidebarSlice";
 import type { RootState } from "@/lib/store";
 interface LeftNavigationProps {
   isDark: boolean;
@@ -21,9 +22,14 @@ export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigation
   const { isLeftNavOpen, activeView } = useSelector(
     (state: RootState) => state.sidebar
   );
+  
 
   const handleNavClick = (section: string) => {
     switch (section) {
+      case "close":
+        dispatch(setIsLeftNavOpen(false));
+        break;
+
       case "chat":
         dispatch(setActiveView("chat"));
         break;
@@ -51,6 +57,7 @@ export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigation
   };
 
   const topNavItems = [
+    
     {
       icon: <Chat />,
       section: "chat",
@@ -75,7 +82,14 @@ export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigation
       label: "Documents",
       isActive: activeView === "documents",
     },
+          {
+      icon: <ChevronLeft />, // 👈 nav close button
+      section: "close",
+      label: "Close Nav",
+      isActive: false,
+    },
   ];
+  
 
   const bottomNavItems = [
     {
@@ -96,6 +110,7 @@ export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigation
       label: "Logout",
       isActive: false,
     },
+
   ];
 
   return (

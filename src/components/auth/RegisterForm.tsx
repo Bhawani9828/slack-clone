@@ -1,10 +1,8 @@
-"use client"
-
-import type React from "react"
-
-import { useState } from "react"
-import Image from "next/image"
-import Link from "next/link"
+"use client";
+import type React from "react";
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -14,170 +12,165 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Snackbar, // Import Snackbar
-  Alert, // Import Alert
-} from "@mui/material"
-import { styled } from "@mui/system"
-import { useRouter } from "next/navigation"
-// Removed: import toast from "react-hot-toast";
-import { postApi } from "@/axios/apiService"
-import API_ENDPOINTS from "@/axios/apiEndpoints"
-import type { AxiosError } from "axios"
+} from "@mui/material";
+import { styled } from "@mui/system";
+import { useRouter } from "next/navigation";
+import { postApi } from "@/axios/apiService";
+import API_ENDPOINTS from "@/axios/apiEndpoints";
+import type { AxiosError } from "axios";
+import { CustomSnackbar } from "../custom-snackbar";
+import { useSnackbar } from "@/hooks/use-snackbar";
 
-// Define the types if they are not already defined in "@/types/registerTypes"
 type RegisterFormData = {
-  name: string
-  countryCode: string
-  mobileNumber: string
-}
+  name: string;
+  countryCode: string;
+  mobileNumber: string;
+};
 
 type RegisterApiResponse = {
-  message: string
-  // Add other fields your API might return on success
-}
+  message: string;
+};
 
-// Custom styled TextField to match the design's border radius and focus color
 const StyledTextField = styled(TextField)({
   "& .MuiOutlinedInput-root": {
-    borderRadius: "0.5rem", // Equivalent to rounded-lg
+    borderRadius: "0.5rem",
     "&.Mui-focused fieldset": {
-      borderColor: "#00B09B", // accent-green on focus
+      borderColor: "#00B09B",
     },
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#00B09B", // accent-green for label on focus
+    color: "#00B09B",
   },
-})
+});
 
-// Custom styled Select to match the design's border radius and focus color
 const StyledSelect = styled(Select)({
   "& .MuiOutlinedInput-root": {
-    borderRadius: "0.5rem", // Equivalent to rounded-lg
+    borderRadius: "0.5rem",
     "&.Mui-focused fieldset": {
-      borderColor: "#00B09B", // accent-green on focus
+      borderColor: "#00B09B",
     },
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#00B09B", // accent-green for label on focus
+    color: "#00B09B",
   },
-})
+});
 
 export default function RegisterForm() {
   const [formData, setFormData] = useState<RegisterFormData>({
     name: "",
-    countryCode: "+1", // Default country code
+    countryCode: "+1",
     mobileNumber: "",
-  })
-  const [loading, setLoading] = useState(false) // Added loading state
-  const [errors, setErrors] = useState<Record<string, string>>({}) // Keep errors state for potential client-side validation
+  });
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { snackbarState, showSnackbar, handleClose } = useSnackbar();
 
-  // State for Snackbar
-  const [snackbarOpen, setSnackbarOpen] = useState(false)
-  const [snackbarMessage, setSnackbarMessage] = useState("")
-  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("info")
+  const router = useRouter();
 
-  const router = useRouter()
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | any) => {
-    const { name, value } = e.target
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | any
+  ) => {
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-    // Clear error for the field being changed
+    }));
+
     if (errors[name]) {
       setErrors((prev) => {
-        const newErrors = { ...prev }
-        delete newErrors[name]
-        return newErrors
-      })
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
     }
-  }
+  };
 
   const handleCountryCodeChange = (e: any) => {
     setFormData((prev) => ({
       ...prev,
       countryCode: e.target.value as string,
-    }))
-  }
-
-  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === "clickaway") {
-      return
-    }
-    setSnackbarOpen(false)
-  }
-
-  const showSnackbar = (message: string, severity: "success" | "error" | "info" | "warning") => {
-    setSnackbarMessage(message)
-    setSnackbarSeverity(severity)
-    setSnackbarOpen(true)
-  }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true) // Set loading to true on submission
-    setErrors({}) // Clear previous errors
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
 
-    // Basic client-side validation (you can integrate Zod here if preferred)
-    const newErrors: Record<string, string> = {}
-    if (!formData.name) newErrors.name = "User Name is required"
-    if (!formData.mobileNumber) newErrors.mobileNumber = "Mobile Number is required"
+    const newErrors: Record<string, string> = {};
+    if (!formData.name) newErrors.name = "User Name is required";
+    if (!formData.mobileNumber)
+      newErrors.mobileNumber = "Mobile Number is required";
     if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      setLoading(false)
-      showSnackbar("Please fill in all required fields.", "error")
-      return
+      setErrors(newErrors);
+      setLoading(false);
+      showSnackbar("Please fill in all required fields.", "error");
+
+      return;
     }
 
     try {
       const payload = {
         name: formData.name,
-        mobileNumber: formData.countryCode + formData.mobileNumber, 
-      }
+        mobileNumber: formData.countryCode + formData.mobileNumber,
+      };
 
       const responseData = await postApi<RegisterApiResponse>(
         API_ENDPOINTS.REGISTER,
-        payload as RegisterFormData, 
-      )
+        payload as RegisterFormData
+      );
 
       if (responseData?.message) {
-        showSnackbar(responseData.message, "success")
-        router.push("/verify") 
+        showSnackbar(responseData.message, "success");
+        router.push("/verify");
       } else {
-        showSnackbar("Something went wrong!", "error")
+        showSnackbar("Something went wrong!", "error");
       }
     } catch (error: unknown) {
-      const err = error as AxiosError<{ message: string }>
-      const errorMessage = err?.response?.data?.message || "Registration failed"
-      showSnackbar(errorMessage, "error")
+      const err = error as AxiosError<{ message: string }>;
+      const errorMessage =
+        err?.response?.data?.message || "Registration failed";
+      showSnackbar(errorMessage, "error");
     } finally {
-      setLoading(false) 
+      setLoading(false);
     }
-  }
+  };
 
   const handleLoginRedirect = () => {
-    router.push("/login")
-  }
+    router.push("/login");
+  };
 
   return (
-    <Card className="mx-auto w-full max-w-md auth_cart">
-      <CardContent className="p-8 space-y-6">
+    <Card className="mx-auto w-full max-w-md auth_cart  rounded-xl">
+      <CardContent className="space-y-6">
         <div className="flex flex-col items-center space-y-4">
-          <Image src="/01.png" alt="Chatzy Logo" width={64} height={64} className="h-16 w-16" />
-          <h1 className="text-2xl font-bold text-gray-800">Welcome to My Chat!</h1>
-          <p className="text-sm text-text-gray text-center">Access your chat from a computer anytime, anyplace.</p>
+          <Image
+            src="/01.png"
+            alt="Chatzy Logo"
+            width={64}
+            height={64}
+            className="h-16 w-16"
+          />
+          <h1 className="text-2xl font-bold text-gray-800">
+            Welcome to My Chat!
+          </h1>
+          <p className="text-sm text-gray-500 text-center">
+            Access your chat from a computer anytime, anyplace.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <InputLabel htmlFor="username" className="text-sm font-medium text-gray-700 mb-1">
+            <InputLabel
+              htmlFor="username"
+              className="text-sm font-medium text-gray-700"
+            >
               User Name
             </InputLabel>
             <StyledTextField
               id="username"
-              name="name" 
-              placeholder="TestUser"
+              name="name"
+              placeholder="Enter User Name"
               variant="outlined"
               fullWidth
               size="small"
@@ -189,28 +182,39 @@ export default function RegisterForm() {
           </div>
 
           <div className="space-y-2">
-            <InputLabel htmlFor="mobile-number" className="text-sm font-medium text-gray-700 mb-1">
+            <InputLabel
+              htmlFor="mobile-number"
+              className="text-sm font-medium text-gray-700"
+            >
               Enter Your Mobile Number
             </InputLabel>
-            <div className="flex gap-2">
-              <FormControl variant="outlined" size="small" sx={{ width: "130px" }}>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <FormControl
+                variant="outlined"
+                size="small"
+                sx={{
+                  width: { xs: "100%", sm: "120px" },
+                }}
+              >
                 <InputLabel id="country-code-label">Code</InputLabel>
                 <StyledSelect
                   labelId="country-code-label"
                   id="country-code-select"
-                  name="countryCode" // Added name prop
+                  name="countryCode"
                   value={formData.countryCode}
                   label="Code"
-                  onChange={handleCountryCodeChange} // Specific handler for select
+                  onChange={handleCountryCodeChange}
                 >
                   <MenuItem value="+1">(+1)</MenuItem>
                   <MenuItem value="+44">(+44)</MenuItem>
                   <MenuItem value="+91">(+91)</MenuItem>
                 </StyledSelect>
               </FormControl>
+
               <StyledTextField
                 id="mobile-number"
-                name="mobileNumber" // Added name prop for handleChange
+                name="mobileNumber"
                 placeholder="0738036136"
                 variant="outlined"
                 fullWidth
@@ -223,11 +227,12 @@ export default function RegisterForm() {
             </div>
           </div>
 
+          {/* Button */}
           <Button
-            type="submit" // Set type to submit
+            type="submit"
             variant="contained"
             fullWidth
-            disabled={loading} // Disable button when loading
+            disabled={loading}
             sx={{
               backgroundColor: "#00B09B",
               "&:hover": {
@@ -236,43 +241,49 @@ export default function RegisterForm() {
               },
               textTransform: "none",
               borderRadius: "0.5rem",
-              paddingY: "0.75rem",
+              paddingY: { xs: "0.65rem", sm: "0.75rem" },
+              fontSize: { xs: "0.9rem", sm: "1rem" },
             }}
           >
-            {loading ? "Registering..." : "Send Verification Code"} {/* Change button text based on loading state */}
+            {loading ? "Registering..." : "Send Verification Code"}
           </Button>
         </form>
 
-        <p className="text-xs text-center my-5 text-text-gray">Send an SMS code to verify your number</p>
+        {/* Extra Info */}
+        <p className="text-xs text-center text-gray-500">
+          Send an SMS code to verify your number
+        </p>
 
-        <p className="text-xs text-center text-text-gray mt-6">
+        <p className="text-xs text-center text-gray-500">
           By moving forward, you concur with the{" "}
-          <Link href="#" className="text-accent-green hover:underline">
+          <Link href="#" className="text-[#00B09B] hover:underline">
             Terms & condition
           </Link>{" "}
           -{" "}
-          <Link href="#" className="text-accent-green hover:underline">
+          <Link href="#" className="text-[#00B09B] hover:underline">
             Privacy policy
           </Link>
         </p>
+
+        {/* Login Redirect */}
         <div className="text-center mt-4">
-          <Button onClick={handleLoginRedirect} variant="text" sx={{ textTransform: "none", color: "#00B09B" }}>
+          <Button
+            onClick={handleLoginRedirect}
+            variant="text"
+            sx={{ textTransform: "none", color: "#00B09B" }}
+          >
             Already have an account? Login
           </Button>
         </div>
       </CardContent>
 
-      {/* MUI Snackbar for Toast Notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }} // Position at bottom center
-      >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: "100%" }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+      {/* Snackbar */}
+      <CustomSnackbar
+        open={snackbarState.open}
+        message={snackbarState.message}
+        severity={snackbarState.severity}
+        onClose={handleClose}
+      />
     </Card>
-  )
+  );
 }

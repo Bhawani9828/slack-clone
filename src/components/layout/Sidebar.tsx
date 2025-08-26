@@ -48,6 +48,8 @@ import { AppDispatch } from "@/lib/store";
 import CreateGroupDialog from "../group/CreateGroupDialog";
 import GroupListView from "../group/GroupListView";
 import { ChatGroup } from "@/types/chatTypes";
+import { useSnackbar } from "@/hooks/use-snackbar";
+import { CustomSnackbar } from "../custom-snackbar";
 
 interface RootState {
   sidebar: {
@@ -88,7 +90,8 @@ export default function Sidebar({
   const dispatch = useDispatch<AppDispatch>();
     // const [chatType, setChatType] = useState<'direct' | 'group'>('direct');
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
- 
+
+  const { snackbarState, showSnackbar, handleClose } = useSnackbar();
   const {
     activeView,
     chatAreaActiveTab,
@@ -146,25 +149,24 @@ const handleGroupClick = (group: ChatGroup) => {
  onGroupSelect?.(group);
 };
 
-  const handleCreateGroup = async (groupData: {
-    name: string;
-    description?: string;
-    participants: string[];
-    groupImage?: string;
-  }) => {
-    try {
-      console.log('Creating group:', groupData);
-      // TODO: Implement API call to create group
-      // const response = await postApi(API_ENDPOINTS.CREATE_GROUP, groupData);
-      // console.log('Group created:', response);
-      
-      // For now, just log the data
-      alert(`Group "${groupData.name}" created with ${groupData.participants.length} participants!`);
-    } catch (error) {
-      console.error('Error creating group:', error);
-      alert('Failed to create group. Please try again.');
-    }
-  };
+const handleCreateGroup = async (groupData: {
+  name: string;
+  description?: string;
+  participants: string[];
+  groupImage?: string;
+}) => {
+  try {
+    console.log("Creating group:", groupData);
+
+    showSnackbar(
+      `Group "${groupData.name}" created with ${groupData.participants.length} participants!`,
+      "success"
+    );
+  } catch (error) {
+    console.error("Error creating group:", error);
+    showSnackbar("Failed to create group. Please try again.", "error");
+  }
+};
 
   const handleBackToChat = () => {
     dispatch(backToChat());
@@ -456,6 +458,12 @@ const handleGroupClick = (group: ChatGroup) => {
         onClose={() => setShowCreateGroupDialog(false)}
         onCreateGroup={handleCreateGroup}
         isDark={isDark}
+      />
+       <CustomSnackbar
+        open={snackbarState.open}
+        message={snackbarState.message}
+        severity={snackbarState.severity}
+        onClose={handleClose}
       />
     </div>
   )
