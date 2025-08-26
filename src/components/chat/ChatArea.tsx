@@ -68,6 +68,8 @@ export default function ChatArea({
   onAddParticipants,
   onRemoveParticipant,
   onChangeAdminStatus,
+   isMobile,      
+  onMobileBack, 
 }: ChatAreaProps) {
   const dispatch = useAppDispatch();
   const {
@@ -502,6 +504,8 @@ const getSenderDisplayName = (senderId: string | { _id: string; name?: string; u
         onlineCount={currentOnlineUsers.length}
         canManageGroup={canManageGroup}
         onLeaveGroup={onLeaveGroup}
+         isMobile={isMobile}
+        onMobileBack={onMobileBack}
       />
 
       {/* ✅ Load more messages button for groups */}

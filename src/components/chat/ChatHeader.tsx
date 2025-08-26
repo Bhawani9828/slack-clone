@@ -17,9 +17,9 @@ import {
   MoreVert,
   VolumeUp,
   Apps,
+  ArrowBack,
 } from "@mui/icons-material";
 import UserAvatar from "./UserAvatar";
-// Call handling is managed at page level via a global hook and modal
 
 interface Contact {
   userId: string;
@@ -47,8 +47,9 @@ interface ChatHeaderProps {
   onVideoCall?: (userId: string, name?: string, avatarUrl?: string) => void;
   onVoiceCall?: (userId: string, name?: string, avatarUrl?: string) => void;
   isTyping?: boolean;
+  isMobile?: boolean;
+  onMobileBack?: () => void;
   
-  // ✅ Group chat specific props
   isGroupChat?: boolean;
   participantCount?: number;
   onlineCount?: number;
@@ -75,10 +76,10 @@ export default function ChatHeader({
   onEditGroup,
   onAddParticipants,
   onShowGroupMedia,
+  isMobile = false,
+  onMobileBack
 }: ChatHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-
-  // Local-only state
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
 
   const handleVideoCall = async () => {
@@ -136,19 +137,43 @@ export default function ChatHeader({
   };
 
   return (
-    <div className="chat-header px-4 py-3   flex items-center justify-between h-28">
+    <div className={`chat-header px-3 py-2 flex items-center justify-between ${
+      isMobile ? 'min-h-16 h-16' : 'h-28'
+    } bg-white shadow-sm`}>
       {/* Left - Contact Info */}
-      <div className="flex items-center space-x-3">
-        {contact.userId && (
-          <UserAvatar
-            userId={contact.userId}
-            name={contact.name}
-            imageUrl={contact.profilePicture || contact.avatar}
-          />
+      <div className="flex items-center space-x-2 flex-1 min-w-0">
+        {/* Mobile Back Button */}
+        {isMobile && onMobileBack && (
+          <IconButton
+            onClick={onMobileBack}
+            size="small"
+            className="text-gray-600 hover:bg-gray-100 p-1"
+          >
+            <ArrowBack fontSize="small" />
+          </IconButton>
         )}
-        <div>
-          <h3 className="font-medium text-[#015a4a]">{contact.name}</h3>
-          <p className="text-sm text-[#4b8d81]">
+        
+        {contact.userId && (
+          <div className="flex-shrink-0">
+            <UserAvatar
+              userId={contact.userId}
+              name={contact.name}
+              imageUrl={contact.profilePicture || contact.avatar}
+             size={isMobile ? 'small' : 'medium'}
+              showOnlineStatus={true}
+            />
+          </div>
+        )}
+        
+        <div className="min-w-0 flex-1">
+          <h3 className={`font-medium text-[#015a4a] truncate ${
+            isMobile ? 'text-sm' : 'text-base'
+          }`}>
+            {contact.name}
+          </h3>
+          <p className={`text-[#4b8d81] truncate ${
+            isMobile ? 'text-xs' : 'text-sm'
+          }`}>
             {isTyping ? "typing..." : 
               isGroupChat ? `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}` :
               contact.status || "Online"}
@@ -157,50 +182,89 @@ export default function ChatHeader({
       </div>
 
       {/* Right - Icons */}
-      <div className="flex items-center space-x-2 !text-[#00a884]">
-        <Tooltip title="Audio" placement="bottom" arrow>
-          <IconButton className="hover:bg-[#00a8841a]">
-            <VolumeUp className="!text-[#00a884]" />
-          </IconButton>
-        </Tooltip>
+      <div className="flex items-center flex-shrink-0">
+        {/* Show fewer icons on mobile */}
+        {!isMobile && (
+          <>
+            <Tooltip title="Audio" placement="bottom" arrow>
+              <IconButton className="hover:bg-[#00a8841a] p-2">
+                <VolumeUp className="!text-[#00a884]" fontSize="small" />
+              </IconButton>
+            </Tooltip>
 
-        <VerticalDivider />
+            <VerticalDivider />
 
-        <Tooltip title="Search" placement="bottom" arrow>
-          <IconButton className="hover:bg-[#00a8841a]">
-            <Search className="!text-[#00a884]"/>
-          </IconButton>
-        </Tooltip>
+            <Tooltip title="Search" placement="bottom" arrow>
+              <IconButton className="hover:bg-[#00a8841a] p-2">
+                <Search className="!text-[#00a884]" fontSize="small" />
+              </IconButton>
+            </Tooltip>
 
-        <VerticalDivider />
+            <VerticalDivider />
+          </>
+        )}
 
         <Tooltip title="Video Call" placement="bottom" arrow>
-          <IconButton onClick={handleVideoCall} className="hover:bg-[#00a8841a] text-red-600">
-            <VideoCall className="!text-[#00a884]" />
+          <IconButton 
+            onClick={handleVideoCall} 
+            className={`hover:bg-[#00a8841a] ${isMobile ? 'p-1' : 'p-2'}`}
+          >
+            <VideoCall 
+              className="!text-[#00a884]" 
+              fontSize={isMobile ? "small" : "medium"} 
+            />
           </IconButton>
         </Tooltip>
 
-        <VerticalDivider />
+        {!isMobile && <VerticalDivider />}
 
         <Tooltip title="Voice Call" placement="bottom" arrow>
-          <IconButton onClick={handleVoiceCall} className="hover:bg-[#00a8841a]">
-            <Call className="!text-[#00a884]"/>
+          <IconButton 
+            onClick={handleVoiceCall} 
+            className={`hover:bg-[#00a8841a] ${isMobile ? 'p-1 ml-1' : 'p-2'}`}
+          >
+            <Call 
+              className="!text-[#00a884]" 
+              fontSize={isMobile ? "small" : "medium"} 
+            />
           </IconButton>
         </Tooltip>
 
-        <VerticalDivider />
+        {!isMobile && <VerticalDivider />}
 
         <Tooltip title="More Options" placement="bottom" arrow>
           <IconButton
             onClick={handleMenuClick}
-            className="hover:bg-[#00a8841a] !bg-white !p-3"
+            className={`hover:bg-[#00a8841a] !bg-white ${isMobile ? 'p-1 ml-1' : 'p-2'}`}
           >
-            <MoreVert className="!text-[#00a884]"/>
+            <MoreVert 
+              className="!text-[#00a884]" 
+              fontSize={isMobile ? "small" : "medium"} 
+            />
           </IconButton>
         </Tooltip>
 
         {/* Menu */}
-        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+        <Menu 
+          anchorEl={anchorEl} 
+          open={Boolean(anchorEl)} 
+          onClose={handleMenuClose}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+        >
+          {/* Add Search and Audio options to mobile menu */}
+          {isMobile && [
+            <MenuItem key="search" onClick={handleMenuClose}>Search</MenuItem>,
+            <MenuItem key="audio" onClick={handleMenuClose}>Audio Settings</MenuItem>,
+            <Divider key="mobile-divider" />
+          ]}
+          
           {isGroupChat
             ? [
                 <MenuItem key="group-info" onClick={handleGroupInfo}>Group Info</MenuItem>,
@@ -224,9 +288,7 @@ export default function ChatHeader({
               ]
           }
         </Menu>
-
       </div>
-      {/* Global CallModal is rendered at page level */}
     </div>
   );
 }
@@ -238,8 +300,8 @@ function VerticalDivider() {
       flexItem
       sx={{
         borderColor: "#00a88450",
-        mx: 2,
-        height: "28px",
+        mx: 1,
+        height: "20px",
         alignSelf: "center",
         display: "flex"
       }}

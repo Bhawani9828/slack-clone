@@ -32,6 +32,8 @@ interface SidebarState {
   chatType: "direct" | "group" | null; 
   showStatusView: boolean;
   statusUserId: string | null;
+    isMobileView: boolean;
+  showChatOnMobile: boolean;
 }
 
 const initialState: SidebarState = {
@@ -45,12 +47,20 @@ const initialState: SidebarState = {
   chatType: "direct",      // ✅
   showStatusView: false,
   statusUserId: null,
+  isMobileView: false,
+  showChatOnMobile: false,
 };
 
 const sidebarSlice = createSlice({
   name: 'sidebar',
   initialState,
   reducers: {
+     setShowChatOnMobile: (state, action) => {
+      state.showChatOnMobile = action.payload;
+    },
+     setIsMobileView: (state, action) => {
+      state.isMobileView = action.payload;
+    },
      setChatType: (state, action: PayloadAction<"direct" | "group">) => {
       state.chatType = action.payload;
     },
@@ -107,7 +117,9 @@ export const {
   setShowStatusView,
   setChatType,
   setStatusUserId,
-  backToChat
+  backToChat,
+  setIsMobileView,
+  setShowChatOnMobile,
 } = sidebarSlice.actions;
 
 export default sidebarSlice.reducer;

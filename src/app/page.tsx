@@ -17,7 +17,9 @@ import {
   setShowStatusView,
   setStatusUserId,
   setChatType,
-  backToChat
+  backToChat,
+  // Add this new action for mobile
+  setIsMobileView
 } from '@/lib/store/slices/sidebarSlice';
 import LeftNavigation from "@/components/layout/LeftNavigation";
 import { ChatGroup } from "@/types/chatTypes";
@@ -57,11 +59,15 @@ export default function HomePage() {
   const chatusers = useSelector((state: RootState) => state.user.chatusers);
   const [callError, setCallError] = useState<string | null>(null);
 
+  // ✅ Add mobile state management
+  const [isMobile, setIsMobile] = useState(false);
+  const [showChatOnMobile, setShowChatOnMobile] = useState(false);
+
   // Call-related UI toggles (for CallModal)
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
+  const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>(null);
   const currentGroupId = selectedGroup?.id || "";
 
   const {
@@ -95,25 +101,45 @@ const [currentCallType, setCurrentCallType] = useState<'video' | 'audio' | null>
   } = useGroupChat(currentGroupId, currentUserId);
 
   // Global call hook
- const {
-  localStream,
-  remoteStream,
-  incomingCall,
-  isCalling,
-  isInCall,
-  callUser,
-  acceptCall,
-  rejectCall,
-  endCall,
-  initLocalStream,
-  ensureSocketConnected,
-} = useCallSocket({ currentUserId });
+  const {
+    localStream,
+    remoteStream,
+    incomingCall,
+    isCalling,
+    isInCall,
+    callUser,
+    acceptCall,
+    rejectCall,
+    endCall,
+    initLocalStream,
+    ensureSocketConnected,
+  } = useCallSocket({ currentUserId });
 
-useEffect(() => {
-  if (!currentUserId) return;
-  socketService.setCurrentUserId(currentUserId);
-  socketService.connect(currentUserId);
-}, [currentUserId]);
+  // ✅ Mobile detection and resize handler
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768; // md breakpoint
+      setIsMobile(mobile);
+      dispatch(setIsMobileView(mobile));
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [dispatch]);
+
+  // ✅ Auto-show chat when user/group is selected on mobile
+  useEffect(() => {
+    if (isMobile && (selectedUser || selectedGroup)) {
+      setShowChatOnMobile(true);
+    }
+  }, [selectedUser, selectedGroup, isMobile]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    socketService.setCurrentUserId(currentUserId);
+    socketService.connect(currentUserId);
+  }, [currentUserId]);
 
   useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
@@ -138,8 +164,6 @@ useEffect(() => {
     }
   }, []);
 
-  
-
   const toggleTheme = () => {
     setIsDark((prev) => {
       const next = !prev;
@@ -160,8 +184,10 @@ useEffect(() => {
       chatAreaActiveTab,
       groupMessages: groupMessages?.length || 0,
       isGroupConnected,
+      isMobile,
+      showChatOnMobile,
     });
-  }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected]);
+  }, [chatType, selectedUser, selectedGroup, chatAreaActiveTab, groupMessages, isGroupConnected, isMobile, showChatOnMobile]);
 
   // Auto-open group
   useEffect(() => {
@@ -221,8 +247,6 @@ useEffect(() => {
     }
   }, [chatType, selectedUser, chatusers, dispatch]);
 
-  
-
   const generateChannelId = (user1Id: string, user2Id: string) => {
     const sortedIds = [user1Id, user2Id].sort();
     return `channel_${sortedIds[0]}_${sortedIds[1]}`;
@@ -232,6 +256,11 @@ useEffect(() => {
     dispatch(setActiveView("chat"));
     dispatch(setChatAreaActiveTab("chat"));
     localStorage.setItem("lastSelectedUserId", contactId);
+    
+    // ✅ Show chat on mobile when contact is selected
+    if (isMobile) {
+      setShowChatOnMobile(true);
+    }
   };
 
   const handleGroupSelect = (group: ChatGroup) => {
@@ -257,9 +286,24 @@ useEffect(() => {
     );
     dispatch(setChatType("group"));
     localStorage.setItem("lastSelectedGroupId", groupId);
+    
+    // ✅ Show chat on mobile when group is selected
+    if (isMobile) {
+      setShowChatOnMobile(true);
+    }
   };
 
-  // Group chat helpers
+  // ✅ Handle back to sidebar on mobile
+  const handleBackToSidebar = () => {
+    if (isMobile) {
+      setShowChatOnMobile(false);
+      // Optionally clear selected user/group
+      // dispatch(setSelectedUser(null));
+      // dispatch(setSelectedGroup(null));
+    }
+  };
+
+  // Group chat helpers (unchanged)
   const handleSendGroupMessage = async (msg: { content: string; type?: "text" | "image" | "video" | "file"; fileUrl?: string; fileName?: string; fileSize?: string; replyTo?: string }) => {
     if (!selectedGroup?.id || !msg.content.trim()) return;
     try {
@@ -315,6 +359,10 @@ useEffect(() => {
         if (success) {
           dispatch(setSelectedGroup(null));
           dispatch(setChatType("direct"));
+          // ✅ Go back to sidebar on mobile after leaving group
+          if (isMobile) {
+            setShowChatOnMobile(false);
+          }
         }
         return success;
       } catch (error) {
@@ -356,159 +404,145 @@ useEffect(() => {
     }
   };
 
-  
-
-  // Start call (global)
-const handleVideoCall = async (userId: string, name?: string) => {
-  try {
-    console.log('🎥 Starting video call to:', userId, name);
-    
-    // ✅ ADD THIS SAFETY CHECK FIRST
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      alert("Video calling is not supported in your browser or requires HTTPS");
+  // Call handlers (unchanged)
+  const handleVideoCall = async (userId: string, name?: string) => {
+    try {
+      console.log('🎥 Starting video call to:', userId, name);
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        alert("Video calling is not supported in your browser or requires HTTPS");
+        setCurrentCallType(null);
+        return;
+      }
+      
+      setCurrentCallType('video');
+      
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasVideo = devices.some(device => device.kind === 'videoinput');
+      
+      if (!hasVideo) {
+        alert('No camera found. Please connect a camera and try again.');
+        setCurrentCallType(null);
+        return;
+      }
+      
+      const stream = await initLocalStream({ video: true, audio: true });
+      if (!stream) {
+        throw new Error('Failed to get video stream');
+      }
+      
+      await callUser(userId, stream, name);
+      console.log('✅ Video call initiated');
+    } catch (error) {
+      console.error('❌ Video call failed:', error);
       setCurrentCallType(null);
-      return;
+      
+      const mediaError = error as DOMException;
+      
+      let errorMessage = 'Failed to start video call.';
+      if (mediaError.name === 'NotReadableError') {
+        errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
+      } else if (mediaError.name === 'NotAllowedError') {
+        errorMessage = 'Camera access denied. Please allow camera access and try again.';
+      } else if (mediaError.name === 'NotFoundError') {
+        errorMessage = 'No camera found. Please connect a camera and try again.';
+      }
+      
+      alert(errorMessage);
     }
-    
-    // ✅ Set the call type BEFORE starting the call
-    setCurrentCallType('video');
-    
-    // Check device availability first
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const hasVideo = devices.some(device => device.kind === 'videoinput');
-    
-    if (!hasVideo) {
-      alert('No camera found. Please connect a camera and try again.');
-      setCurrentCallType(null);
-      return;
-    }
-    
-    // Get media stream first
-    const stream = await initLocalStream({ video: true, audio: true });
-    if (!stream) {
-      throw new Error('Failed to get video stream');
-    }
-    
-    // Make the call
-    await callUser(userId, stream, name);
-    console.log('✅ Video call initiated');
-  } catch (error) {
-    console.error('❌ Video call failed:', error);
-    setCurrentCallType(null);
-    
-    // Type guard for media errors
-    const mediaError = error as DOMException;
-    
-    let errorMessage = 'Failed to start video call.';
-    if (mediaError.name === 'NotReadableError') {
-      errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
-    } else if (mediaError.name === 'NotAllowedError') {
-      errorMessage = 'Camera access denied. Please allow camera access and try again.';
-    } else if (mediaError.name === 'NotFoundError') {
-      errorMessage = 'No camera found. Please connect a camera and try again.';
-    }
-    
-    alert(errorMessage);
-  }
-};
+  };
 
-const handleVoiceCall = async (userId: string, name?: string) => {
-  try {
-    console.log('📞 Starting voice call to:', userId, name);
-    
-    // ✅ ADD THIS SAFETY CHECK
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      alert("Voice calling is not supported in your browser or requires HTTPS");
-      return;
+  const handleVoiceCall = async (userId: string, name?: string) => {
+    try {
+      console.log('📞 Starting voice call to:', userId, name);
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        alert("Voice calling is not supported in your browser or requires HTTPS");
+        return;
+      }
+      
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasAudio = devices.some(device => device.kind === 'audioinput');
+      
+      if (!hasAudio) {
+        alert('No microphone found. Please connect a microphone and try again.');
+        return;
+      }
+      
+      const stream = await initLocalStream({ video: false, audio: true });
+      if (!stream) {
+        throw new Error('Failed to get audio stream');
+      }
+      
+      await callUser(userId, stream, name);
+      console.log('✅ Voice call initiated');
+    } catch (error) {
+      console.error('❌ Voice call failed:', error);
+      
+      const mediaError = error as DOMException;
+      
+      let errorMessage = 'Failed to start voice call.';
+      if (mediaError.name === 'NotReadableError') {
+        errorMessage = 'Microphone is in use by another application. Please close other apps and try again.';
+      } else if (mediaError.name === 'NotAllowedError') {
+        errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
+      } else if (mediaError.name === 'NotFoundError') {
+        errorMessage = 'No microphone found. Please connect a microphone and try again.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  // Call modal logic (unchanged)
+  const isCallModalOpen = Boolean(
+    incomingCall ||
+    (isInCall && (localStream || remoteStream)) ||
+    (isCalling && localStream) ||
+    callError 
+  );
+
+  useEffect(() => {
+    console.log('📊 Call State Debug:', {
+      incomingCall: !!incomingCall,
+      isCalling,
+      isInCall,
+      localStream: !!localStream,
+      remoteStream: !!remoteStream,
+      modalShouldBeOpen: isCallModalOpen,
+      callerName: incomingCall?.fromName || selectedUser?.name || 'Unknown'
+    });
+  }, [incomingCall, isCalling, isInCall, localStream, remoteStream, isCallModalOpen, selectedUser]);
+
+  const handleAcceptCall = async () => {
+    try {
+      await acceptCall();
+      setCallError(null);
+    } catch (err: any) {
+      console.log("Setting callError:", err.message);
+      setCallError(err.message || "Call accept failed");
+    }
+  };
+
+  const getCallerInfo = () => {
+    if (incomingCall) {
+      return {
+        name: incomingCall.fromName || 'Unknown',
+        avatar: undefined,
+      };
     }
     
-    // Check device availability first
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const hasAudio = devices.some(device => device.kind === 'audioinput');
-    
-    if (!hasAudio) {
-      alert('No microphone found. Please connect a microphone and try again.');
-      return;
+    if (selectedUser && (isCalling || isInCall)) {
+      return {
+        name: selectedUser.name,
+        avatar: selectedUser.profilePicture || selectedUser.avatar,
+      };
     }
     
-    // Get media stream first
-    const stream = await initLocalStream({ video: false, audio: true });
-    if (!stream) {
-      throw new Error('Failed to get audio stream');
-    }
-    
-    // Make the call
-    await callUser(userId, stream, name);
-    console.log('✅ Voice call initiated');
-  } catch (error) {
-    console.error('❌ Voice call failed:', error);
-    
-    // Type guard for media errors
-    const mediaError = error as DOMException;
-    
-    let errorMessage = 'Failed to start voice call.';
-    if (mediaError.name === 'NotReadableError') {
-      errorMessage = 'Microphone is in use by another application. Please close other apps and try again.';
-    } else if (mediaError.name === 'NotAllowedError') {
-      errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
-    } else if (mediaError.name === 'NotFoundError') {
-      errorMessage = 'No microphone found. Please connect a microphone and try again.';
-    }
-    
-    alert(errorMessage);
-  }
-};
+    return { name: 'Unknown', avatar: undefined };
+  };
 
-// Update the modal open condition to be more specific
-const isCallModalOpen = Boolean(
-  incomingCall ||
-  (isInCall && (localStream || remoteStream)) ||
-  (isCalling && localStream) ||
-  callError 
-);
-
-// Add debug logging for call state
-useEffect(() => {
-  console.log('📊 Call State Debug:', {
-    incomingCall: !!incomingCall,
-    isCalling,
-    isInCall,
-    localStream: !!localStream,
-    remoteStream: !!remoteStream,
-    modalShouldBeOpen: isCallModalOpen,
-    callerName: incomingCall?.fromName || selectedUser?.name || 'Unknown'
-  });
-}, [incomingCall, isCalling, isInCall, localStream, remoteStream, isCallModalOpen, selectedUser]);
-
-const handleAcceptCall = async () => {
-  try {
-    await acceptCall();
-    setCallError(null);
-  } catch (err: any) {
-    console.log("Setting callError:", err.message);
-    setCallError(err.message || "Call accept failed");
-  }
-};
-
-const getCallerInfo = () => {
-  if (incomingCall) {
-    return {
-      name: incomingCall.fromName || 'Unknown',
-      avatar: undefined, // You might want to fetch this based on the caller ID
-    };
-  }
-  
-  if (selectedUser && (isCalling || isInCall)) {
-    return {
-      name: selectedUser.name,
-      avatar: selectedUser.profilePicture || selectedUser.avatar,
-    };
-  }
-  
-  return { name: 'Unknown', avatar: undefined };
-};
-
-const callerInfo = getCallerInfo();
+  const callerInfo = getCallerInfo();
 
   const handleBackToChat = () => {
     dispatch(backToChat());
@@ -530,18 +564,38 @@ const callerInfo = getCallerInfo();
 
   return (
     <>
-      <div className={`relative flex h-screen ${bgColor}`}>
-        <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
+     <div className={`relative flex h-screen ${bgColor} ${isMobile ? 'mobile-chat-container no-scroll-x' : ''}`}>
+        {/* ✅ Left Navigation - Hide on mobile when chat is open */}
+        <div className={`${isMobile && showChatOnMobile ? 'hidden' : 'block'}`}>
+          <LeftNavigation isDark={isDark} onToggleTheme={toggleTheme} />
+        </div>
         
-        <div className={`flex flex-1 transition-all duration-300 ${isLeftNavOpen ? "ml-24" : "ml-0"}`}>
-          <Sidebar
-            onContactSelect={handleContactSelect}
-            onGroupSelect={handleGroupSelect} 
-            isDark={isDark}
-            initialSelectedUserId={initialSelectedUserId}
-          />
+             <div className={`flex flex-1 transition-all duration-300 ${
+        !isMobile && isLeftNavOpen ? "ml-24" : "ml-0"
+      } ${isMobile ? 'main-content-mobile no-scroll-x' : ''}`}>
+          {/* ✅ Sidebar - Conditional rendering based on mobile state */}
+          <div className={`${
+          isMobile 
+            ? (showChatOnMobile ? 'hidden' : 'mobile-sidebar mobile-full-width') 
+            : 'w-100'
+        } transition-all duration-300 ${isMobile ? 'no-scroll-x' : ''}`}>
+            <Sidebar
+              onContactSelect={handleContactSelect}
+              onGroupSelect={handleGroupSelect} 
+              isDark={isDark}
+              initialSelectedUserId={initialSelectedUserId}
+              // ✅ Pass mobile state and handlers
+              isMobile={isMobile}
+              onMobileBack={handleBackToSidebar}
+            />
+          </div>
           
-          <div className="flex-1">
+          {/* ✅ Chat Area - Conditional rendering and responsive width */}
+          <div className={`${
+          isMobile 
+            ? (showChatOnMobile ? 'mobile-chat-area mobile-full-width' : 'hidden') 
+            : 'flex-1'
+        } transition-all duration-300 ${isMobile ? 'no-scroll-x' : ''}`}>
             {(selectedUser || selectedGroup) ? (
               <>
                 {chatAreaActiveTab === "chat" && (
@@ -567,6 +621,9 @@ const callerInfo = getCallerInfo();
                           onVideoCall={() => handleVideoCall(selectedUser.id, selectedUser.name)}
                           onVoiceCall={() => handleVoiceCall(selectedUser.id, selectedUser.name)}
                           isDark={isDark}
+                          // ✅ Pass mobile state and back handler
+                          isMobile={isMobile}
+                          onMobileBack={handleBackToSidebar}
                         />
                       )
                     ) : null}
@@ -619,6 +676,9 @@ const callerInfo = getCallerInfo();
                           onAddParticipants={addParticipants}
                           onRemoveParticipant={removeParticipant}
                           onChangeAdminStatus={changeAdminStatus}
+                          // ✅ Pass mobile state and back handler
+                          isMobile={isMobile}
+                          onMobileBack={handleBackToSidebar}
                         />
                       )
                     ) : null}
@@ -722,53 +782,51 @@ const callerInfo = getCallerInfo();
         </div>
         
         {/* Global Call Modal */}
-<CallModal
-  open={isCallModalOpen}
-  onClose={() => {
-    // Only allow closing if we're not in the middle of accepting a call
-    if (!isInCall || remoteStream) {
-      endCall();
-    }
-  }}
-  callError={callError}
-  onAccept={handleAcceptCall}
-  incomingCall={incomingCall}
-  localStream={localStream}
-  remoteStream={remoteStream}
-  isIncoming={!!incomingCall && !isInCall}
-  isInCall={isInCall || (isCalling && !!localStream)}
-  // onAccept={acceptCall}
-  onReject={rejectCall}
-  onEndCall={endCall}
-  onToggleMic={() => {
-    if (localStream) {
-      const track = localStream.getAudioTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        setIsMicOn(track.enabled);
-      }
-    }
-  }}
-  onToggleVideo={() => {
-    if (localStream) {
-      const track = localStream.getVideoTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        setIsVideoOn(track.enabled);
-      }
-    }
-  }}
-  onToggleSpeaker={() => setIsSpeakerOn(!isSpeakerOn)}
-  isMicOn={isMicOn}
-  isVideoOn={isVideoOn}
-  isSpeakerOn={isSpeakerOn}
-  callerName={incomingCall?.fromName || selectedUser?.name || 'Unknown'}
-  callerAvatar={
-    incomingCall 
-      ? undefined // You might want to fetch this based on caller ID
-      : selectedUser?.profilePicture || selectedUser?.avatar
-  }
-/>
+        <CallModal
+          open={isCallModalOpen}
+          onClose={() => {
+            if (!isInCall || remoteStream) {
+              endCall();
+            }
+          }}
+          callError={callError}
+          onAccept={handleAcceptCall}
+          incomingCall={incomingCall}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isIncoming={!!incomingCall && !isInCall}
+          isInCall={isInCall || (isCalling && !!localStream)}
+          onReject={rejectCall}
+          onEndCall={endCall}
+          onToggleMic={() => {
+            if (localStream) {
+              const track = localStream.getAudioTracks()[0];
+              if (track) {
+                track.enabled = !track.enabled;
+                setIsMicOn(track.enabled);
+              }
+            }
+          }}
+          onToggleVideo={() => {
+            if (localStream) {
+              const track = localStream.getVideoTracks()[0];
+              if (track) {
+                track.enabled = !track.enabled;
+                setIsVideoOn(track.enabled);
+              }
+            }
+          }}
+          onToggleSpeaker={() => setIsSpeakerOn(!isSpeakerOn)}
+          isMicOn={isMicOn}
+          isVideoOn={isVideoOn}
+          isSpeakerOn={isSpeakerOn}
+          callerName={incomingCall?.fromName || selectedUser?.name || 'Unknown'}
+          callerAvatar={
+            incomingCall 
+              ? undefined 
+              : selectedUser?.profilePicture || selectedUser?.avatar
+          }
+        />
       </div>
     </>
   );

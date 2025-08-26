@@ -15,7 +15,8 @@ import {
   PersonSearchRounded,
   Group,
   PlusOne,
-  GroupAddRounded
+  GroupAddRounded,
+  ArrowBack
 } from "@mui/icons-material";
 
 import { getApi } from "@/axios/apiService";
@@ -73,12 +74,16 @@ export default function Sidebar({
   onContactSelect,
   onGroupSelect,
   isDark,
-  initialSelectedUserId
+  initialSelectedUserId,
+  isMobile = false,        
+  onMobileBack,
 }: {
   onContactSelect?: (contactId: string) => void;
    onGroupSelect?: (group: ChatGroup) => void;
   isDark: boolean;
   initialSelectedUserId: string | null;
+   isMobile?: boolean;     
+  onMobileBack?: () => void;
 }) {
   const dispatch = useDispatch<AppDispatch>();
     // const [chatType, setChatType] = useState<'direct' | 'group'>('direct');
@@ -201,10 +206,18 @@ const handleGroupClick = (group: ChatGroup) => {
 
   // Default Chat View
   return (
-    <div className={`h-screen w-100 ${bgColor} border-r ${borderColor} flex flex-col`}>
+    <div className={`h-screen ${isMobile ? 'w-full' : 'w-100'} ${bgColor} border-r ${borderColor} flex flex-col`}>
       {/* Header */}
       <div className={` px-4 py-3 border-b ${borderColor}`}>
         <div className="flex items-center justify-between mb-4">
+            {isMobile && (selectedUser || selectedGroup) && (
+      <IconButton
+        onClick={onMobileBack}
+        className={`${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-600 hover:bg-gray-200"}`}
+      >
+        <ArrowBack />
+      </IconButton>
+    )}
           <div className="flex items-center space-x-3">
             <Avatar 
               src={currentUser?.profilePicture || `https://ui-avatars.com/api/?name=${currentUser?.name || 'User'}&background=01aa85&color=fff`} 

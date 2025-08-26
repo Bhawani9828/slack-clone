@@ -1,11 +1,10 @@
-// components/ChatInput.tsx - Fixed Double Messages & Sending Issues
+// components/ChatInput.tsx - Responsive Mobile & Desktop Version
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, useRef, type ChangeEvent } from "react"
-import { TextField, IconButton } from "@mui/material"
-import { Send, EmojiEmotions, AttachFile, Image, VideoCameraBack } from "@mui/icons-material"
+import { TextField, IconButton, useMediaQuery, useTheme } from "@mui/material"
+import { Send, EmojiEmotions, AttachFile, Image, VideoCameraBack, Add } from "@mui/icons-material"
 import API_ENDPOINTS from "@/axios/apiEndpoints"
 import axios from "axios"
 import { uploadThroughBackend, uploadToCloudinary } from "@/axios/cloudinaryService"
@@ -14,6 +13,7 @@ import { socketService } from "@/lib/socket"
 import type { ApiMessage } from "@/types/chatTypes"
 import groupChatSocketService from "@/lib/group-chat-socket.service"
 import EmojiPicker from "./EmojiPicker";
+
 interface ChatInputProps {
   currentUserId: string
   senderId: string
@@ -41,16 +41,20 @@ export default function ChatInput({
   replyingTo,
   forwarding,
 }: ChatInputProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [message, setMessage] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [showAttachOptions, setShowAttachOptions] = useState(false)
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastTypingSentRef = useRef<boolean>(false)
   const inputRef = useRef<HTMLInputElement>(null)
-const lastEnterTimestampRef = useRef<number>(0);
+  const lastEnterTimestampRef = useRef<number>(0);
   const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
   const isEmojiOpen = Boolean(emojiAnchorEl);
 
@@ -69,7 +73,6 @@ const lastEnterTimestampRef = useRef<number>(0);
     const end = el.selectionEnd ?? el.value.length;
     const newValue = (message || "").slice(0, start) + textToInsert + (message || "").slice(end);
     setMessage(newValue);
-    // Restore caret after state update in next tick
     requestAnimationFrame(() => {
       try {
         el.focus();
@@ -79,9 +82,7 @@ const lastEnterTimestampRef = useRef<number>(0);
     });
   };
 
-
-
-  // 🔒 Enhanced duplicate prevention
+  // Enhanced duplicate prevention
   const sentMessagesRef = useRef<Set<string>>(new Set())
   const sendingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -157,7 +158,6 @@ const lastEnterTimestampRef = useRef<number>(0);
     const now = Date.now()
     const messageContent = message.trim()
 
-    // 🔒 Validation
     if (!messageContent || !currentUserId || (!receiverId && !groupId)) {
       return
     }
@@ -173,7 +173,7 @@ const lastEnterTimestampRef = useRef<number>(0);
     sendingTimeoutRef.current = setTimeout(() => {
       console.warn("[v0] Send timeout reached, resetting isSending")
       setIsSending(false)
-    }, 10000) // 10 second timeout
+    }, 10000)
 
     try {
       console.log("🚀 Sending message...")
@@ -376,6 +376,7 @@ const lastEnterTimestampRef = useRef<number>(0);
     try {
       setIsUploading(true)
       setUploadProgress(0)
+      setShowAttachOptions(false) // Close attachment menu
 
       let fileCategory: "image" | "video" | "file" = "file"
       if (file.type.startsWith("image/")) {
@@ -454,14 +455,13 @@ const lastEnterTimestampRef = useRef<number>(0);
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
-        fileInputRef.current.accept = "image/*,video/*,.pdf,.doc,.docx" // Reset accept attribute
+        fileInputRef.current.accept = "image/*,video/*,.pdf,.doc,.docx"
       }
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !isSending) { // ✅ Prevent send during sending
-      // Prevent key-repeat double send
+    if (e.key === "Enter" && !e.shiftKey && !isSending) {
       const now = Date.now();
       if (now - lastEnterTimestampRef.current < 300) {
         e.preventDefault();
@@ -473,10 +473,27 @@ const lastEnterTimestampRef = useRef<number>(0);
     }
   };
 
+  const handleAttachmentClick = (type: 'file' | 'image' | 'video') => {
+    if (fileInputRef.current) {
+      switch (type) {
+        case 'image':
+          fileInputRef.current.accept = "image/*"
+          break;
+        case 'video':
+          fileInputRef.current.accept = "video/*"
+          break;
+        case 'file':
+          fileInputRef.current.accept = "image/*,video/*,.pdf,.doc,.docx"
+          break;
+      }
+      fileInputRef.current.click()
+    }
+    setShowAttachOptions(false)
+  };
 
   return (
-   <div className="chat-input px-4 py-3">
-      <div className="flex items-end space-x-2">
+    <div className={`chat-input bg-white ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
+      <div className={`flex items-end ${isMobile ? 'space-x-1' : 'space-x-2'}`}>
         <input
           type="file"
           ref={fileInputRef}
@@ -485,91 +502,142 @@ const lastEnterTimestampRef = useRef<number>(0);
           className="hidden"
         />
 
-        <div className="flex space-x-1">
-          <IconButton
-            onClick={() => fileInputRef.current?.click()}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
-            title="Attach file"
-            disabled={isUploading || isSending}
-          >
-            <AttachFile />
-          </IconButton>
+        {/* Desktop Attachment Buttons */}
+        {!isMobile && (
+          <div className="flex space-x-1">
+            <IconButton
+              onClick={() => handleAttachmentClick('file')}
+              className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+              title="Attach file"
+              disabled={isUploading || isSending}
+              size={isMobile ? "small" : "medium"}
+            >
+              <AttachFile fontSize="small" />
+            </IconButton>
 
-          <IconButton
-            onClick={() => {
-              if (fileInputRef.current) {
-                fileInputRef.current.accept = "image/*"
-                fileInputRef.current.click()
-              }
-            }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
-            title="Send image"
-            disabled={isUploading || isSending}
-          >
-            <Image />
-          </IconButton>
+            <IconButton
+              onClick={() => handleAttachmentClick('image')}
+              className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+              title="Send image"
+              disabled={isUploading || isSending}
+             size={isMobile ? "small" : "medium"}
+            >
+              <Image fontSize="small" />
+            </IconButton>
 
-          <IconButton
-            onClick={() => {
-              if (fileInputRef.current) {
-                fileInputRef.current.accept = "video/*"
-                fileInputRef.current.click()
-              }
-            }}
-            className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
-            title="Send video"
-            disabled={isUploading || isSending}
-          >
-            <VideoCameraBack />
-          </IconButton>
-        </div>
+            <IconButton
+              onClick={() => handleAttachmentClick('video')}
+              className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+              title="Send video"
+              disabled={isUploading || isSending}
+             size={isMobile ? "small" : "medium"}
+            >
+              <VideoCameraBack fontSize="small" />
+            </IconButton>
+          </div>
+        )}
 
-  <IconButton 
+        {/* Mobile Attachment Button */}
+        {isMobile && (
+          <div className="relative">
+            <IconButton
+              onClick={() => setShowAttachOptions(!showAttachOptions)}
+              className={`mb-1 ${showAttachOptions ? '!bg-[#01aa85] !text-white' : '!text-[#01aa85] !bg-[#01aa8526]'}`}
+              disabled={isUploading || isSending}
+              size="small"
+            >
+              <Add fontSize="small" />
+            </IconButton>
+            
+            {/* Mobile Attachment Options Popup */}
+            {showAttachOptions && (
+              <div className="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-lg border p-2 z-10">
+                <div className="flex flex-col space-y-1">
+                  <button
+                    onClick={() => handleAttachmentClick('image')}
+                    className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-left text-sm"
+                    disabled={isUploading || isSending}
+                  >
+                    <Image fontSize="small" className="text-[#01aa85]" />
+                    <span>Photo</span>
+                  </button>
+                  <button
+                    onClick={() => handleAttachmentClick('video')}
+                    className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-left text-sm"
+                    disabled={isUploading || isSending}
+                  >
+                    <VideoCameraBack fontSize="small" className="text-[#01aa85]" />
+                    <span>Video</span>
+                  </button>
+                  <button
+                    onClick={() => handleAttachmentClick('file')}
+                    className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-left text-sm"
+                    disabled={isUploading || isSending}
+                  >
+                    <AttachFile fontSize="small" className="text-[#01aa85]" />
+                    <span>File</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Emoji Button */}
+        <IconButton 
           className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#008f6e] mb-1"
           onClick={openEmojiPicker}
           disabled={isUploading || isSending}
+          size={isMobile ? "small" : "medium"}
         >
-          <EmojiEmotions />
+          <EmojiEmotions fontSize={isMobile ? "small" : "medium"} />
         </IconButton>
 
+        {/* Text Input */}
         <div className="flex-1">
           <TextField
             inputRef={inputRef as any}
             fullWidth
             multiline
-            maxRows={4}
+            maxRows={isMobile ? 3 : 4}
             placeholder={isGroupChat ? "Message to group..." : "Write your message..."}
             value={message}
             onChange={(e) => handleMessageChange(e.target.value)}
-           onKeyDown={handleKeyDown}
+            onKeyDown={handleKeyDown}
             variant="outlined"
-            size="small"
-           disabled={isUploading || isSending}
-            className=" rounded-full"
+            size={isMobile ? "small" : "medium"}
+            disabled={isUploading || isSending}
+            className="rounded-full"
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: "25px",
+                borderRadius: isMobile ? "20px" : "25px",
                 backgroundColor: "white",
+                fontSize: isMobile ? "14px" : "16px",
                 "& fieldset": { borderColor: "transparent" },
                 "&:hover fieldset": { borderColor: "transparent" },
                 "&.Mui-focused fieldset": { borderColor: "transparent" },
+                "& .MuiOutlinedInput-input": {
+                  padding: isMobile ? "8px 12px" : "10px 14px"
+                }
               },
             }}
           />
         </div>
 
+        {/* Send Button */}
         <IconButton
           onClick={handleSend}
           className={`mb-1 !text-white transition-all ${
             isSending ? "!bg-gray-400 cursor-not-allowed" : "!bg-[#01aa85] hover:!bg-[#008f6e]"
           }`}
           disabled={isUploading || isSending}
+          size={isMobile ? "small" : "medium"}
         >
-          <Send />
+          <Send fontSize={isMobile ? "small" : "medium"} />
         </IconButton>
       </div>
 
-       {/* Emoji Picker */}
+      {/* Emoji Picker */}
       <EmojiPicker
         anchorEl={emojiAnchorEl}
         open={isEmojiOpen}
@@ -579,16 +647,25 @@ const lastEnterTimestampRef = useRef<number>(0);
         }}
       />
 
+      {/* Upload Progress */}
       {isUploading && (
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+        <div className={`w-full bg-gray-200 rounded-full h-2 ${isMobile ? 'mt-2' : 'mt-3'}`}>
           <div
-             className="bg-[#01aa85] h-2.5 rounded-full transition-all duration-300"
+            className="bg-[#01aa85] h-2 rounded-full transition-all duration-300"
             style={{ width: `${uploadProgress}%` }}
           ></div>
-          <p className="text-sm text-gray-600 mt-1 text-center">
-             {uploadProgress === 100 ? "Upload complete!" : `Uploading... ${uploadProgress.toFixed(0)}%`}
+          <p className={`text-gray-600 text-center ${isMobile ? 'text-xs mt-1' : 'text-sm mt-2'}`}>
+            {uploadProgress === 100 ? "Upload complete!" : `Uploading... ${uploadProgress.toFixed(0)}%`}
           </p>
         </div>
+      )}
+
+      {/* Click outside to close attachment options */}
+      {isMobile && showAttachOptions && (
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => setShowAttachOptions(false)}
+        />
       )}
     </div>
   )

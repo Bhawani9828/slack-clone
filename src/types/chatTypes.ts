@@ -158,6 +158,8 @@ export interface ChatAreaProps {
   onVideoCall?: () => void;
   onVoiceCall?: () => void;
   isDark?: boolean;
+  isMobile?: boolean;
+  onMobileBack?: () => void;
   
   // ✅ Add these new group chat props
   groupInfo?: GroupInfo | null;
