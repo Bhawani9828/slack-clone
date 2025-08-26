@@ -1,7 +1,7 @@
 // components/layout/Sidebar.tsx
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector, useDispatch } from "react-redux";
 import { Avatar, IconButton, TextField, InputAdornment } from "@mui/material";
 import {
   MoreVert,
@@ -16,7 +16,7 @@ import {
   Group,
   PlusOne,
   GroupAddRounded,
-  ArrowBack
+  ArrowBack,
 } from "@mui/icons-material";
 
 import { getApi } from "@/axios/apiService";
@@ -30,7 +30,7 @@ import CallListView from "../sidebarComponets/CallListView";
 import ContactListView from "../sidebarComponets/ContactListView";
 import SettingsView from "../sidebarComponets/SettingsView";
 import StatusCarousel from "../status/StatusCarousel";
-import { fetchChatUsers,fetchCurrentUser  } from '@/lib/store/slices/userSlice';
+import { fetchChatUsers, fetchCurrentUser } from "@/lib/store/slices/userSlice";
 import {
   setActiveView,
   setChatAreaActiveTab,
@@ -38,12 +38,12 @@ import {
   setActiveCallFilter,
   setIsLeftNavOpen,
   setSelectedUser,
-   setSelectedGroup,
+  setSelectedGroup,
   setShowStatusView,
   setChatType,
   setStatusUserId,
-  backToChat
-} from '@/lib/store/slices/sidebarSlice';
+  backToChat,
+} from "@/lib/store/slices/sidebarSlice";
 import { AppDispatch } from "@/lib/store";
 import CreateGroupDialog from "../group/CreateGroupDialog";
 import GroupListView from "../group/GroupListView";
@@ -53,7 +53,13 @@ import { CustomSnackbar } from "../custom-snackbar";
 
 interface RootState {
   sidebar: {
-    activeView: "chat" | "status" | "notifications" | "documents" | "contacts" | "settings";
+    activeView:
+      | "chat"
+      | "status"
+      | "notifications"
+      | "documents"
+      | "contacts"
+      | "settings";
     chatAreaActiveTab: "chat" | "call" | "contact";
     searchQuery: string;
     activeCallFilter: "all" | "incoming" | "outgoing" | "missed";
@@ -77,18 +83,18 @@ export default function Sidebar({
   onGroupSelect,
   isDark,
   initialSelectedUserId,
-  isMobile = false,        
+  isMobile = false,
   onMobileBack,
 }: {
   onContactSelect?: (contactId: string) => void;
-   onGroupSelect?: (group: ChatGroup) => void;
+  onGroupSelect?: (group: ChatGroup) => void;
   isDark: boolean;
   initialSelectedUserId: string | null;
-   isMobile?: boolean;     
+  isMobile?: boolean;
   onMobileBack?: () => void;
 }) {
   const dispatch = useDispatch<AppDispatch>();
-    // const [chatType, setChatType] = useState<'direct' | 'group'>('direct');
+  // const [chatType, setChatType] = useState<'direct' | 'group'>('direct');
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
 
   const { snackbarState, showSnackbar, handleClose } = useSnackbar();
@@ -102,10 +108,12 @@ export default function Sidebar({
     selectedGroup,
     chatType,
     showStatusView,
-    statusUserId
+    statusUserId,
   } = useSelector((state: RootState) => state.sidebar);
 
-  const { chatusers, isLoadingUsers,  currentUser } = useSelector((state: RootState) => state.user);
+  const { chatusers, isLoadingUsers, currentUser } = useSelector(
+    (state: RootState) => state.user
+  );
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const initialSelectionMade = useRef(false);
@@ -115,8 +123,14 @@ export default function Sidebar({
   }, [searchQuery, dispatch]);
 
   useEffect(() => {
-    if (initialSelectedUserId && chatusers.length > 0 && !initialSelectionMade.current) {
-      const userToSelect = chatusers.find((user) => user.id === initialSelectedUserId);
+    if (
+      initialSelectedUserId &&
+      chatusers.length > 0 &&
+      !initialSelectionMade.current
+    ) {
+      const userToSelect = chatusers.find(
+        (user) => user.id === initialSelectedUserId
+      );
       if (userToSelect) {
         dispatch(setSelectedUser(userToSelect));
         onContactSelect?.(userToSelect.id);
@@ -126,16 +140,16 @@ export default function Sidebar({
   }, [chatusers, initialSelectedUserId, dispatch, onContactSelect]);
 
   useEffect(() => {
-  // Fetch current user first
-  dispatch(fetchCurrentUser())
-    .then(() => {
-      // Then fetch chat users
-      return dispatch(fetchChatUsers(searchQuery));
-    })
-    .catch(error => {
-      console.error('Initialization error:', error);
-    });
-}, [searchQuery, dispatch]);
+    // Fetch current user first
+    dispatch(fetchCurrentUser())
+      .then(() => {
+        // Then fetch chat users
+        return dispatch(fetchChatUsers(searchQuery));
+      })
+      .catch((error) => {
+        console.error("Initialization error:", error);
+      });
+  }, [searchQuery, dispatch]);
 
   const handleContactSelect = (id: string) => {
     const user = chatusers.find((u) => u.id === id);
@@ -145,28 +159,28 @@ export default function Sidebar({
     }
   };
 
-const handleGroupClick = (group: ChatGroup) => {
- onGroupSelect?.(group);
-};
+  const handleGroupClick = (group: ChatGroup) => {
+    onGroupSelect?.(group);
+  };
 
-const handleCreateGroup = async (groupData: {
-  name: string;
-  description?: string;
-  participants: string[];
-  groupImage?: string;
-}) => {
-  try {
-    console.log("Creating group:", groupData);
+  const handleCreateGroup = async (groupData: {
+    name: string;
+    description?: string;
+    participants: string[];
+    groupImage?: string;
+  }) => {
+    try {
+      console.log("Creating group:", groupData);
 
-    showSnackbar(
-      `Group "${groupData.name}" created with ${groupData.participants.length} participants!`,
-      "success"
-    );
-  } catch (error) {
-    console.error("Error creating group:", error);
-    showSnackbar("Failed to create group. Please try again.", "error");
-  }
-};
+      showSnackbar(
+        `Group "${groupData.name}" created with ${groupData.participants.length} participants!`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error creating group:", error);
+      showSnackbar("Failed to create group. Please try again.", "error");
+    }
+  };
 
   const handleBackToChat = () => {
     dispatch(backToChat());
@@ -176,18 +190,18 @@ const handleCreateGroup = async (groupData: {
   const bgColor = isDark ? "bg-[#020d0b]" : "bg-white";
   const textColor = isDark ? "text-white" : "text-gray-900";
   const borderColor = isDark ? "border-gray-700" : "border-gray-300";
-  const currentUserId = currentUser?._id || '';
-  
+  const currentUserId = currentUser?._id || "";
+
   // Conditional rendering based on Redux state
   if (activeView === "documents") {
-    return <DocumentView isDark={isDark} onBackToChat={handleBackToChat} />
+    return <DocumentView isDark={isDark} onBackToChat={handleBackToChat} />;
   }
 
   if (showStatusView) {
     return (
-      <StatusView 
+      <StatusView
         isDark={isDark}
-        onBackToChat={() => dispatch(setShowStatusView(false))} 
+        onBackToChat={() => dispatch(setShowStatusView(false))}
         currentUserId={currentUserId}
         statusUserId={statusUserId}
       />
@@ -195,59 +209,85 @@ const handleCreateGroup = async (groupData: {
   }
 
   if (activeView === "contacts") {
-    return <ContactView isDark={isDark} onBackToChat={handleBackToChat} onContactSelect={onContactSelect} />
+    return (
+      <ContactView
+        isDark={isDark}
+        onBackToChat={handleBackToChat}
+        onContactSelect={onContactSelect}
+      />
+    );
   }
 
   if (activeView === "notifications") {
-    return <NotificationView isDark={isDark} onBackToChat={handleBackToChat} />
+    return <NotificationView isDark={isDark} onBackToChat={handleBackToChat} />;
   }
 
   if (activeView === "settings") {
-    return <SettingsView isDark={isDark} onBackToChat={handleBackToChat} />
+    return <SettingsView isDark={isDark} onBackToChat={handleBackToChat} />;
   }
 
   // Default Chat View
   return (
-      <div
-    style={{ height: "var(--app-height)" }}
-    className={`${isMobile ? 'w-full' : 'w-100'} ${bgColor} border-r ${borderColor} flex flex-col`}
-  >
+    <div
+      style={{ height: "var(--app-height)" }}
+      className={`${
+        isMobile ? "w-full" : "w-100"
+      } ${bgColor} border-r ${borderColor} flex flex-col`}
+    >
       {/* Header */}
       <div className={` px-4 py-3 border-b ${borderColor}`}>
         <div className="flex items-center justify-between mb-4">
-            {isMobile && (selectedUser || selectedGroup) && (
-      <IconButton
-        onClick={onMobileBack}
-        className={`${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-600 hover:bg-gray-200"}`}
-      >
-        <ArrowBack />
-      </IconButton>
-    )}
+          {isMobile && (selectedUser || selectedGroup) && (
+            <IconButton
+              onClick={onMobileBack}
+              className={`${
+                isDark
+                  ? "text-gray-300 hover:bg-gray-700"
+                  : "text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <ArrowBack />
+            </IconButton>
+          )}
           <div className="flex items-center space-x-3">
-            <Avatar 
-              src={currentUser?.profilePicture || `https://ui-avatars.com/api/?name=${currentUser?.name || 'User'}&background=01aa85&color=fff`} 
+            <Avatar
+              src={
+                currentUser?.profilePicture ||
+                `https://ui-avatars.com/api/?name=${
+                  currentUser?.name || "User"
+                }&background=01aa85&color=fff`
+              }
               className="!w-14 !h-14"
             />
             <div>
               <h3 className={`font-medium ${textColor}`}>
-                {currentUser?.name || 'Loading...'}
+                {currentUser?.name || "Loading..."}
               </h3>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {currentUser?.status || (currentUser?.isVerified ? 'Verified' : 'Not Verified')}
+              <p
+                className={`text-sm ${
+                  isDark ? "text-gray-400" : "text-gray-600"
+                }`}
+              >
+                {currentUser?.status ||
+                  (currentUser?.isVerified ? "Verified" : "Not Verified")}
               </p>
             </div>
           </div>
           <IconButton
-            className={`${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-600 hover:bg-gray-200"}`}
+            className={`${
+              isDark
+                ? "text-gray-300 hover:bg-gray-700"
+                : "text-gray-600 hover:bg-gray-200"
+            }`}
             onClick={() => dispatch(setIsLeftNavOpen(!isLeftNavOpen))}
           >
             <MoreVert />
           </IconButton>
         </div>
-        
+
         {/* Status Section */}
         <div className="mb-4">
-          <StatusCarousel 
+          <StatusCarousel
             onViewAll={() => {
               dispatch(setStatusUserId(null));
               dispatch(setShowStatusView(true));
@@ -260,39 +300,43 @@ const handleCreateGroup = async (groupData: {
           />
         </div>
       </div>
-        
+
       {/* Tab Navigation */}
       <div className={`px-4 py-2 ${bgColor} border-b ${borderColor}`}>
-       <div className="flex items-center justify-between mb-3">
-  <h4 className={`font-medium ${textColor}`}>
-    Message ({chatusers.length})
-  </h4>
-  <div className="flex items-center space-x-2">
-   
+        <div className="flex items-center justify-between mb-3">
+          <h4 className={`font-medium ${textColor}`}>
+            Message ({chatusers.length})
+          </h4>
+          <div className="flex items-center space-x-2">
+            {/* Add Group Button */}
+            <IconButton
+              size="small"
+              onClick={() => setShowCreateGroupDialog(true)}
+              type="button"
+              className={`${
+                isDark
+                  ? "text-gray-300 !bg-[#043429]"
+                  : "text-gray-600 !bg-gray-200"
+              }`}
+            >
+              <GroupAddRounded
+                className={`${isDark ? "!text-white" : "!text-black"}`}
+              />
+            </IconButton>
+          </div>
+        </div>
 
-    {/* Add Group Button */}
-    <IconButton
-      size="small"
-      onClick={() => setShowCreateGroupDialog(true)}
-      type="button"
-      className={`${
-        isDark ? "text-gray-300 !bg-[#043429]" : "text-gray-600 !bg-gray-200"
-      }`}
-    >
-      <GroupAddRounded
-        className={`${isDark ? "!text-white" : "!text-black"}`}
-      />
-    </IconButton>
-  </div>
-</div>
-        
         <div className="flex space-x-2 mb-3">
           <button
             onClick={() => dispatch(setChatAreaActiveTab("chat"))}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               chatAreaActiveTab === "chat"
                 ? "bg-[#01aa85] green_shadow text-white"
-                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+                : `${
+                    isDark
+                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`
             }`}
           >
             <Chat className="!w-4 !h-4 mr-1 inline" />
@@ -303,7 +347,11 @@ const handleCreateGroup = async (groupData: {
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               chatAreaActiveTab === "call"
                 ? "bg-[#01aa85] green_shadow text-white"
-                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+                : `${
+                    isDark
+                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`
             }`}
             style={
               chatAreaActiveTab === "call"
@@ -319,21 +367,29 @@ const handleCreateGroup = async (groupData: {
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               chatAreaActiveTab === "contact"
                 ? "bg-[#01aa85] green_shadow text-white"
-                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+                : `${
+                    isDark
+                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`
             }`}
           >
             <Contacts className="!w-4 !h-4 mr-1 inline" />
             Contact
           </button>
         </div>
-        
+
         <div className="flex space-x-2">
-          <button 
+          <button
             onClick={() => dispatch(setChatType("direct"))}
             className={`px-4 py-2 w-full rounded-lg text-sm font-medium transition-colors ${
-              chatType === 'direct'
+              chatType === "direct"
                 ? "bg-[#01aa85] text-white"
-                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+                : `${
+                    isDark
+                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`
             }`}
           >
             Direct
@@ -341,23 +397,24 @@ const handleCreateGroup = async (groupData: {
           <button
             onClick={() => dispatch(setChatType("group"))}
             className={`px-4 py-2 rounded-lg w-full text-sm font-medium transition-colors ${
-              chatType === 'group'
+              chatType === "group"
                 ? "bg-[#01aa85] text-white"
-                : `${isDark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`
+                : `${
+                    isDark
+                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`
             }`}
           >
             <Group className="!w-4 !h-4 mr-1 inline" />
             Group
           </button>
-           
- 
         </div>
       </div>
-      
+
       {/* Search */}
       <div className={`px-4 py-3 border-b ${borderColor}`}>
         <TextField
-        
           fullWidth
           size="small"
           placeholder="Search or start new chat"
@@ -367,7 +424,9 @@ const handleCreateGroup = async (groupData: {
             spellCheck: false,
             startAdornment: (
               <InputAdornment position="start">
-                <Search className={`${isDark ? "text-gray-400" : "text-gray-400"}`} />
+                <Search
+                  className={`${isDark ? "text-gray-400" : "text-gray-400"}`}
+                />
               </InputAdornment>
             ),
           }}
@@ -389,12 +448,12 @@ const handleCreateGroup = async (groupData: {
           }}
         />
       </div>
-      
+
       {/* Chat List / Call List / Contact List */}
       <div className="flex-1 scrollable">
-             {chatAreaActiveTab === "chat" && (
+        {chatAreaActiveTab === "chat" && (
           <>
-            {chatType === 'direct' ? (
+            {chatType === "direct" ? (
               <ChatListView
                 searchQuery={searchQuery}
                 isDark={isDark}
@@ -402,18 +461,18 @@ const handleCreateGroup = async (groupData: {
                 onContactClick={handleContactSelect}
               />
             ) : (
-            <GroupListView
-  searchQuery={searchQuery}
-  isDark={isDark}
-   onGroupClick={(groupInfo) =>
-    handleGroupClick({
-      ...groupInfo,
-      members: [], // add empty members
-    })
-  }
-  currentUserId={currentUser?._id} // from Redux user slice
-  selectedGroupId={selectedGroup?._id || null} // from Redux sidebar slice
-/>
+              <GroupListView
+                searchQuery={searchQuery}
+                isDark={isDark}
+                onGroupClick={(groupInfo) =>
+                  handleGroupClick({
+                    ...groupInfo,
+                    members: [],
+                  })
+                }
+                currentUserId={currentUser?._id}
+                selectedGroupId={selectedGroup?._id || null}
+              />
             )}
           </>
         )}
@@ -421,9 +480,10 @@ const handleCreateGroup = async (groupData: {
         {chatAreaActiveTab === "call" && (
           <CallListView
             activeCallFilter={activeCallFilter}
-            setActiveCallFilter={(filter) => dispatch(setActiveCallFilter(filter))}
+            setActiveCallFilter={(filter) =>
+              dispatch(setActiveCallFilter(filter))
+            }
             isDark={isDark}
-            
           />
         )}
 
@@ -434,7 +494,7 @@ const handleCreateGroup = async (groupData: {
           />
         )}
       </div>
-      
+
       {/* Floating Add Button */}
       {/* <div className="absolute bottom-20 right-6">
         <IconButton
@@ -452,19 +512,19 @@ const handleCreateGroup = async (groupData: {
         </IconButton>
       </div> */}
 
-          {/* Create Group Dialog */}
+      {/* Create Group Dialog */}
       <CreateGroupDialog
         open={showCreateGroupDialog}
         onClose={() => setShowCreateGroupDialog(false)}
         onCreateGroup={handleCreateGroup}
         isDark={isDark}
       />
-       <CustomSnackbar
+      <CustomSnackbar
         open={snackbarState.open}
         message={snackbarState.message}
         severity={snackbarState.severity}
         onClose={handleClose}
       />
     </div>
-  )
+  );
 }

@@ -125,9 +125,9 @@ export default function ChatListView({
     console.log('👁️ Message read confirmation:', data);
     dispatch(updateChatUserLastMessage({
       chatId: data.chatId,
-      lastMessage: '', // Don't change message content
-      time: '', // Don't change time
-      markRead: true // Just mark as read
+      lastMessage: '', 
+      time: '', 
+      markRead: true 
     }));
   }, [dispatch]);
 

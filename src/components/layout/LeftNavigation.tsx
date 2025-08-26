@@ -114,7 +114,7 @@ export default function LeftNavigation({ isDark, onToggleTheme }: LeftNavigation
   ];
 
   return (
-    <div className={`left-nav-container ${isLeftNavOpen ? "open" : "closed"}`}>
+    <div className={`left-nav-container ${isLeftNavOpen ? "open" : "closed"}`} style={{ height: "var(--app-height)" }}>
       <div className="left-nav-logo">
         <strong className="left-nav-logo-text">B</strong>
       </div>
