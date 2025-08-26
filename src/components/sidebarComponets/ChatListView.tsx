@@ -204,7 +204,7 @@ export default function ChatListView({
     style={{
       flex: 1,
       overflowY: "auto",
-      maxHeight: "calc(100vh - 100px)", // adjust as per your layout (sidebar/header ka size minus karna padega)
+      maxHeight: "calc(100vh - 100px)", 
     }}
   >
       {filteredChats.map((chat) => {

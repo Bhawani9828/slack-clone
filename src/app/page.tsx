@@ -142,6 +142,23 @@ export default function HomePage() {
   }, [currentUserId]);
 
   useEffect(() => {
+  const checkMobile = () => {
+    const mobile = window.innerWidth < 768; // md breakpoint
+    setIsMobile(mobile);
+    dispatch(setIsMobileView(mobile));
+
+    // ✅ Mobile hone par LeftNavigation close karo
+    if (mobile) {
+      dispatch(setIsLeftNavOpen(false));
+    }
+  };
+
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, [dispatch]);
+
+  useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
     const userName = localStorage.getItem("currentUserName") || "Current User";
     setCurrentUserId(userId);
