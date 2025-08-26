@@ -200,13 +200,7 @@ export default function ChatListView({
 
   return (
     <>
-      <div
-    style={{
-      flex: 1,
-      overflowY: "auto",
-      maxHeight: "calc(100vh - 100px)", 
-    }}
-  >
+   
       {filteredChats.map((chat) => {
         const isActiveChat = chat.unreadCount && chat.unreadCount > 0
         const messageColor = chat.isTyping 
@@ -325,7 +319,7 @@ export default function ChatListView({
           </div>
         )
       })}
-      </div>
+     
       <style jsx global>{`
         @keyframes bounce {
           0%, 100% {

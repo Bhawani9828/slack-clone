@@ -12,6 +12,12 @@
   --bubble-in: #ffffff;
   --accent: #01aa85;
   --overlay-hover: rgba(0,0,0,0.06);
+  --app-height: 100%;
+}
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
 }
 .dark {
   --bg-app: #0b141a;
@@ -24,6 +30,11 @@
   --bubble-in: #1f2c33;
   --accent: #01aa85;
   --overlay-hover: rgba(255,255,255,0.08);
+}
+
+.scrollable {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
 }
 
 body {

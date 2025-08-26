@@ -206,7 +206,10 @@ const handleGroupClick = (group: ChatGroup) => {
 
   // Default Chat View
   return (
-    <div className={`h-screen ${isMobile ? 'w-full' : 'w-100'} ${bgColor} border-r ${borderColor} flex flex-col`}>
+      <div
+    style={{ height: "var(--app-height)" }}
+    className={`${isMobile ? 'w-full' : 'w-100'} ${bgColor} border-r ${borderColor} flex flex-col`}
+  >
       {/* Header */}
       <div className={` px-4 py-3 border-b ${borderColor}`}>
         <div className="flex items-center justify-between mb-4">
@@ -386,7 +389,7 @@ const handleGroupClick = (group: ChatGroup) => {
       </div>
       
       {/* Chat List / Call List / Contact List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 scrollable">
              {chatAreaActiveTab === "chat" && (
           <>
             {chatType === 'direct' ? (
