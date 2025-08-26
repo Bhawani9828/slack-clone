@@ -200,6 +200,13 @@ export default function ChatListView({
 
   return (
     <>
+      <div
+    style={{
+      flex: 1,
+      overflowY: "auto",
+      maxHeight: "calc(100vh - 100px)", // adjust as per your layout (sidebar/header ka size minus karna padega)
+    }}
+  >
       {filteredChats.map((chat) => {
         const isActiveChat = chat.unreadCount && chat.unreadCount > 0
         const messageColor = chat.isTyping 
@@ -318,6 +325,7 @@ export default function ChatListView({
           </div>
         )
       })}
+      </div>
       <style jsx global>{`
         @keyframes bounce {
           0%, 100% {

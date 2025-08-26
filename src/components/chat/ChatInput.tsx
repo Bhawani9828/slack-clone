@@ -493,7 +493,7 @@ export default function ChatInput({
 
   return (
     <div className={`chat-input bg-white ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
-      <div className={`flex items-end ${isMobile ? 'space-x-1' : 'space-x-2'}`}>
+      <div className={`flex items-center ${isMobile ? 'space-x-1' : 'space-x-2'}`}>
         <input
           type="file"
           ref={fileInputRef}
@@ -504,10 +504,10 @@ export default function ChatInput({
 
         {/* Desktop Attachment Buttons */}
         {!isMobile && (
-          <div className="flex space-x-1">
+          <div className="flex space-x-1 ">
             <IconButton
               onClick={() => handleAttachmentClick('file')}
-              className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] mb-1"
+              className="!text-[#01aa85] !bg-[#01aa8526] hover:!bg-[#01aa8552] me-3"
               title="Attach file"
               disabled={isUploading || isSending}
               size={isMobile ? "small" : "medium"}

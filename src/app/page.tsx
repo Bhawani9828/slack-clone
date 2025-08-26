@@ -578,7 +578,7 @@ export default function HomePage() {
           isMobile 
             ? (showChatOnMobile ? 'hidden' : 'mobile-sidebar mobile-full-width') 
             : 'w-100'
-        } transition-all duration-300 ${isMobile ? 'no-scroll-x' : ''}`}>
+        } transition-all duration-300 `}>
             <Sidebar
               onContactSelect={handleContactSelect}
               onGroupSelect={handleGroupSelect} 
