@@ -90,24 +90,43 @@ export default function CallModal({
     }
   }, [remoteStream, isSpeakerOn]);
 
-  // Ringtone management
+  // Ringtone management - Fixed with better error handling
   useEffect(() => {
-    if (isIncoming && !isInCall && open) {
-      setIsRinging(true);
-      // Play ringtone
-      if (ringtoneRef.current) {
-        ringtoneRef.current.play().catch(console.error);
+    const manageRingtone = async () => {
+      if (isIncoming && !isInCall && open) {
+        setIsRinging(true);
+        console.log('📞 Starting ringtone');
+        
+        if (ringtoneRef.current) {
+          try {
+            // Set volume and play
+            ringtoneRef.current.volume = 0.7;
+            ringtoneRef.current.currentTime = 0;
+            
+            const playPromise = ringtoneRef.current.play();
+            if (playPromise) {
+              await playPromise;
+              console.log('📞 Ringtone playing');
+            }
+          } catch (error) {
+            console.warn('⚠️ Ringtone autoplay blocked:', error);
+            // Fallback: try to play with user interaction
+          }
+        }
+      } else {
+        setIsRinging(false);
+        console.log('📞 Stopping ringtone');
+        
+        if (ringtoneRef.current) {
+          ringtoneRef.current.pause();
+          ringtoneRef.current.currentTime = 0;
+        }
       }
-    } else {
-      setIsRinging(false);
-      // Stop ringtone
-      if (ringtoneRef.current) {
-        ringtoneRef.current.pause();
-        ringtoneRef.current.currentTime = 0;
-      }
-    }
+    };
 
-    // Cleanup ringtone when component unmounts or call ends
+    manageRingtone();
+
+    // Cleanup
     return () => {
       if (ringtoneRef.current) {
         ringtoneRef.current.pause();
@@ -192,13 +211,17 @@ export default function CallModal({
         className="hidden"
       />
       
-      {/* Ringtone audio element */}
+      {/* Ringtone audio element with proper ringtone */}
       <audio
         ref={ringtoneRef}
         loop
         preload="auto"
         className="hidden"
+        crossOrigin="anonymous"
       >
+        {/* Using a proper ringtone URL - you can replace with your own */}
+        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.wav" type="audio/wav" />
+        {/* Fallback ringtone */}
         <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+Dys2spBj2Y3u++dScELIHO8tiINwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+Dys2spBj2Y3u++dScELI=" type="audio/wav" />
       </audio>
       
