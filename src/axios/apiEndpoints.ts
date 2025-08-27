@@ -21,7 +21,7 @@ const API_ENDPOINTS = {
   },
 
   LAST_MESSAGES: '/messages/last-messages',
-
+VERIFY_FIREBASE_TOKEN: "/auth/verify-firebase-token",
     
   };
   

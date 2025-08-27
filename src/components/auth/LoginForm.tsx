@@ -122,7 +122,11 @@ export default function LoginForm() {
       if (responseData?.message) {
         showSnackbar(responseData.message, "success");
 
-        router.push("/verify");
+        
+        localStorage.setItem("pendingMobile", formData.mobileNumber);
+
+       
+        router.push(`/verify?mobile=${formData.mobileNumber}`);
       } else {
         showSnackbar("Failed to send verification code!", "error");
       }
