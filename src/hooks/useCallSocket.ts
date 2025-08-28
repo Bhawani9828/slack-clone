@@ -23,10 +23,10 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isCalling, setIsCalling] = useState(false);
   const [isInCall, setIsInCall] = useState(false);
-  const __ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  const isAndroid = /Android/i.test(__ua);
-  const androidVersionMatch = __ua.match(/Android (\d+\.?\d*)/);
-  const androidVersion = androidVersionMatch ? parseFloat(androidVersionMatch[1]) : 0;
+const [isAndroid, setIsAndroid] = useState(false);
+const [androidVersion, setAndroidVersion] = useState(0);
+
+  
   const isLegacyDevice = isAndroid && androidVersion > 0 && androidVersion < 11;
   const [incomingCall, setIncomingCall] = useState<{
     from: string;
@@ -66,7 +66,16 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   }>({});
 
   // Device and platform detection
-  
+  useEffect(() => {
+  if (typeof navigator !== "undefined") {
+    const ua = navigator.userAgent;
+    const androidMatch = ua.match(/Android (\d+\.?\d*)/);
+    const version = androidMatch ? parseFloat(androidMatch[1]) : 0;
+
+    setIsAndroid(/Android/i.test(ua));
+    setAndroidVersion(version);
+  }
+}, []);
 
   // Initialize audio and check WebRTC support on mount
   useEffect(() => {
