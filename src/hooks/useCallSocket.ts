@@ -60,10 +60,13 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     callId?: string;
   }>({});
 
-  // Device and platform detection
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  const isLegacyDevice = isAndroid && parseFloat(navigator.userAgent.match(/Android (\d+\.?\d*)/)?.[1] || '0') < 11;
-
+  // Device and platform detection (guarded for SSR)
+  const __ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isAndroid = /Android/i.test(__ua);
+  const androidVersionMatch = __ua.match(/Android (\d+\.?\d*)/);
+  const androidVersion = androidVersionMatch ? parseFloat(androidVersionMatch[1]) : 0;
+  const isLegacyDevice = isAndroid && androidVersion > 0 && androidVersion < 11;
+  
   // Initialize audio and check WebRTC support on mount
   useEffect(() => {
     const initializeCallSystem = async () => {
