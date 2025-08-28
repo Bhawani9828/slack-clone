@@ -59,6 +59,9 @@ export default function CallModal({
   callError,
   deviceStatus,
 }: CallModalProps) {
+   const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isMobile = isAndroid || isIOS;
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
@@ -76,9 +79,7 @@ export default function CallModal({
   const vibrationPatternRef = useRef<NodeJS.Timeout | null>(null);
 
   // Device detection
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isMobile = isAndroid || isIOS;
+ 
 
   // Initialize audio context on first user interaction
   const initializeAudio = async () => {
@@ -179,12 +180,16 @@ export default function CallModal({
           // For mobile devices, also use vibration
           if (isMobile && 'vibrate' in navigator) {
             const vibratePattern = [1000, 500, 1000, 500, 1000, 500];
-            navigator.vibrate(vibratePattern);
+           if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+  navigator.vibrate(vibratePattern);
+}
             
             // Repeat vibration pattern
             vibrationPatternRef.current = setInterval(() => {
               if (isRinging) {
-                navigator.vibrate(vibratePattern);
+                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+  navigator.vibrate(vibratePattern);
+}
               }
             }, 4000);
           }
@@ -219,10 +224,11 @@ export default function CallModal({
           ringtoneSoundRef.current.currentTime = 0;
         }
         
+        
         // Stop vibration
-        if ('vibrate' in navigator) {
-          navigator.vibrate(0);
-        }
+     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+  navigator.vibrate(0);
+}
         
         if (vibrationPatternRef.current) {
           clearInterval(vibrationPatternRef.current);
@@ -354,6 +360,8 @@ export default function CallModal({
 
   // Handle fullscreen toggle
   const toggleFullscreen = () => {
+    if (typeof document === 'undefined') return;
+      
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
         console.warn('Failed to enter fullscreen:', err);
