@@ -1,6 +1,8 @@
+"use client"
+
 import { useEffect, useRef, useState, useCallback } from "react"
 import { socketService } from "@/lib/socket"
-import { createFallbackBeep, playIncomingCallSound, stopIncomingCallSound } from "@/lib/audioUtils";
+import { createFallbackBeep } from "@/lib/audioUtils";
 interface UseCallSocketProps {
   currentUserId: string
 }
@@ -28,11 +30,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   const socketRef = useRef<any>(null)
   const endCallRef = useRef<() => void>(() => {})
   const justAcceptedAtRef = useRef<number>(0)
-  const pendingRemoteCandidatesRef = useRef<any[]>([])
-  const iceServersRef = useRef<RTCIceServer[]>([
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ])
 
   const currentCallRef = useRef<{
     targetUserId?: string
@@ -248,7 +245,9 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
   const createPeerConnection = useCallback(
     (stream?: MediaStream) => {
-      const pc = new RTCPeerConnection({ iceServers: iceServersRef.current })
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
+      })
 
       const streamToUse = stream || localStream
       if (streamToUse) {
@@ -374,16 +373,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       await pc.setRemoteDescription(incomingCall.offer)
       console.log("✅ Set remote description")
 
-      // Drain any queued ICE candidates received before PC/remote description was ready
-      try {
-        while (pendingRemoteCandidatesRef.current.length) {
-          const cand = pendingRemoteCandidatesRef.current.shift()
-          await pc.addIceCandidate(cand)
-        }
-      } catch (e) {
-        logError("Error draining queued ICE candidates (accept)", e)
-      }
-
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
       console.log("✅ Created and set local description (answer)")
@@ -397,7 +386,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
       console.log("📤 Sent call-accepted event")
       setIncomingCall(null)
-      stopIncomingCallSound()
     } catch (error) {
       const errorInfo = logError("Accept call failed", error)
 
@@ -430,7 +418,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     })
 
     setIncomingCall(null)
-    stopIncomingCallSound()
     currentCallRef.current = {}
   }, [incomingCall, currentUserId])
 
@@ -475,7 +462,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     setIsInCall(false)
     setIncomingCall(null)
     setCallError(null)
-    stopIncomingCallSound()
     currentCallRef.current = {}
   }, [localStream, remoteStream, incomingCall, currentUserId])
 
@@ -484,19 +470,19 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   }, [endCall])
    useEffect(() => {
     socketService.onIncomingCall((data) => {
-      setIncomingCall(data) // Modal open logic
-      playIncomingCallSound()
-    })
-    socketService.onCallAccepted((_data) => {
-      stopIncomingCallSound()
-    })
+      setIncomingCall(data); // Modal open logic
+    });
+    socketService.onCallAccepted((data) => {
+      // handle call accepted
+    });
     // ...other listeners...
 
     return () => {
-      socketService.offIncomingCall()
-      socketService.offCallAccepted()
-    }
-  }, [currentUserId])
+      socketService.offIncomingCall();
+      socketService.offCallAccepted();
+      // ...other cleanup...
+    };
+  }, [currentUserId]);
 
   // Main socket setup effect - Enhanced with better call ID handling
   useEffect(() => {
@@ -566,15 +552,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           if (peerConnectionRef.current && data.answer) {
             try {
               await peerConnectionRef.current.setRemoteDescription(data.answer)
-              // Drain queued candidates now that remote description is set
-              try {
-                while (pendingRemoteCandidatesRef.current.length) {
-                  const cand = pendingRemoteCandidatesRef.current.shift()
-                  await peerConnectionRef.current.addIceCandidate(cand)
-                }
-              } catch (e) {
-                logError("Error draining queued ICE candidates (offerer)", e)
-              }
               setIsCalling(false)
               setIsInCall(true)
               console.log("✅ Call established successfully")
@@ -616,7 +593,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           }
 
           endCallRef.current?.()
-          stopIncomingCallSound()
         }
 
         
@@ -629,16 +605,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 //           const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"];
 // events.forEach((event) => socket.off(event));
 
-          if (data.candidate) {
-            if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
-              try {
-                await peerConnectionRef.current.addIceCandidate(data.candidate)
-              } catch (error) {
-                logError("Error adding ICE candidate", error)
-              }
-            } else {
-              // Queue until PC and remote description are ready
-              pendingRemoteCandidatesRef.current.push(data.candidate)
+          if (peerConnectionRef.current && data.candidate) {
+            try {
+              await peerConnectionRef.current.addIceCandidate(data.candidate)
+            } catch (error) {
+              logError("Error adding ICE candidate", error)
             }
           }
         }
@@ -674,47 +645,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
     return () => {
       endCallRef.current?.()
     }
-  }, [])
-
-  // Dynamically resolve ICE servers from env (supports OpenRelay/Metered API)
-  useEffect(() => {
-    const turnUrl = process.env.NEXT_PUBLIC_TURN_URL
-    const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME
-    const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL
-    const turnApiUrl = process.env.NEXT_PUBLIC_TURN_API_URL
-
-    const base: RTCIceServer[] = [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-    ]
-
-    // Static TURN from env
-    if (turnUrl && turnUsername && turnCredential) {
-      base.push({ urls: turnUrl, username: turnUsername, credential: turnCredential })
-    }
-
-    iceServersRef.current = base
-
-    // Dynamic TURN via API (preferred for Metered OpenRelay)
-    const fetchIce = async () => {
-      if (!turnApiUrl) return
-      try {
-        const res = await fetch(turnApiUrl, { cache: "no-store" })
-        const data = await res.json()
-        const apiServers: RTCIceServer[] = Array.isArray(data)
-          ? data
-          : Array.isArray((data as any)?.iceServers)
-            ? (data as any).iceServers
-            : []
-        if (apiServers.length) {
-          iceServersRef.current = [...base, ...apiServers]
-          console.log("✅ Loaded dynamic ICE servers from TURN API")
-        }
-      } catch (e) {
-        console.warn("⚠️ Failed to load TURN API credentials, using static/default ICE servers", e)
-      }
-    }
-    fetchIce()
   }, [])
 
   return {
