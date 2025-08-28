@@ -579,6 +579,8 @@ export default function HomePage() {
     }
   }, [channelId, currentUserId]);
 
+  
+
   return (
     <>
       <div className={`relative flex h-screen ${bgColor} ${isMobile ? 'mobile-chat-container no-scroll-x' : ''}`}>

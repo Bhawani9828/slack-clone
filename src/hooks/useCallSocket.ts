@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { socketService } from "@/lib/socket"
-import { createFallbackBeep } from "@/lib/audioUtils";
+import { createFallbackBeep } from "@/lib/audioUtils"
+
 interface UseCallSocketProps {
   currentUserId: string
 }
@@ -75,6 +76,14 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
         // Check available devices
         console.log("📋 Enumerating devices...")
+        
+        // Add safety check
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          setCallError("Media devices not supported in this browser")
+          setDeviceStatus((prev) => ({ ...prev, checking: false }))
+          return false
+        }
+
         const devices = await navigator.mediaDevices.enumerateDevices()
         console.log(
           "📋 Available devices:",
@@ -85,13 +94,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         const hasMicrophone = devices.some((device) => device.kind === "audioinput")
 
         console.log("📋 Device availability:", { hasCamera, hasMicrophone })
-
-         // ✅ ADD THIS SAFETY CHECK
-      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        setCallError("Media devices not supported in this browser");
-        setDeviceStatus((prev) => ({ ...prev, checking: false }));
-        return false;
-      }
 
         setDeviceStatus({
           camera: hasCamera,
@@ -135,9 +137,9 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           let errorMessage = "Failed to access camera/microphone."
           const error = testError as DOMException
 
-    if (error.name === "NotReadableError" || errorInfo.message.includes("in use")) {
-  createFallbackBeep();
-}
+          if (error.name === "NotReadableError" || errorInfo.message.includes("in use")) {
+            createFallbackBeep()
+          }
 
           setCallError(errorMessage)
           throw new Error(errorMessage)
@@ -145,7 +147,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       } catch (error) {
         setDeviceStatus((prev) => ({ ...prev, checking: false }))
         if (error instanceof Error) {
-          // Error already logged and handled above
           throw error
         } else {
           const errorInfo = logError("Device check failed", error)
@@ -188,9 +189,7 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
         return stream
       } catch (error) {
         const errorInfo = logError("Failed to get user media", error)
-
         setCallError(`Failed to access camera/microphone: ${errorInfo.message}`)
-
         return null
       }
     },
@@ -350,7 +349,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       const constraints = { video: incomingCall.type === "video", audio: true }
       console.log("🎥 Getting media for accept call:", constraints)
 
-      // Use the enhanced initLocalStream
       const stream = await initLocalStream(constraints)
       if (!stream) {
         throw new Error("Failed to initialize local stream for call")
@@ -397,7 +395,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       setIsInCall(false)
       setIsCalling(false)
 
-      // Show user-friendly error message
       const errorMessage = callError || `Failed to accept call: ${errorInfo.message}`
       alert(errorMessage)
 
@@ -426,7 +423,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
     console.log("📞 Ending call with:", targetUserId)
 
-    // Stop tracks
     if (localStream) {
       localStream.getTracks().forEach((track) => {
         track.stop()
@@ -440,13 +436,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       })
     }
 
-    // Close PC
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close()
       peerConnectionRef.current = null
     }
 
-    // Notify other side
     if (targetUserId && socketRef.current?.connected) {
       socketRef.current.emit("end-call", {
         to: targetUserId,
@@ -455,7 +449,6 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
       })
     }
 
-    // Reset state
     setLocalStream(null)
     setRemoteStream(null)
     setIsCalling(false)
@@ -468,27 +461,10 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
   useEffect(() => {
     endCallRef.current = endCall
   }, [endCall])
-   useEffect(() => {
-    socketService.onIncomingCall((data) => {
-      setIncomingCall(data); // Modal open logic
-    });
-    socketService.onCallAccepted((data) => {
-      // handle call accepted
-    });
-    // ...other listeners...
 
-    return () => {
-      socketService.offIncomingCall();
-      socketService.offCallAccepted();
-      // ...other cleanup...
-    };
-  }, [currentUserId]);
-
-  // Main socket setup effect - Enhanced with better call ID handling
+  // Fixed socket setup effect using direct socket event listeners
   useEffect(() => {
     if (!currentUserId) return
-
-    let cleanup: (() => void) | undefined
 
     const initSocket = async () => {
       try {
@@ -501,29 +477,20 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
         console.log("📡 Setting up call event listeners...")
 
-        // Clear existing listeners
-        // const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"]
-        // events.forEach((event) => socket.off(event))
-
+        // Define event handlers
         const handleIncomingCall = (data: any) => {
           console.log("📞 Incoming call received:", data)
-          setIncomingCall(data);
-  setTimeout(() => {
-    console.log("📞 incomingCall state after set:", incomingCall);
-  }, 500);
-
+          
           if (!data || data.from === currentUserId || !data.offer || !data.callId) {
             console.log("📞 Invalid incoming call data, ignoring")
             return
           }
 
-          // Check for duplicate calls using callId
           if (incomingCall && incomingCall.callId === data.callId) {
             console.log("📞 Duplicate incoming call ignored (same callId)")
             return
           }
 
-          // Store call ID and show incoming call
           currentCallRef.current.callId = data.callId
           setIncomingCall({
             from: data.from,
@@ -595,15 +562,11 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           endCallRef.current?.()
         }
 
-        
-
         const handleIceCandidate = async (data: any) => {
           if (data?.callId && data.callId !== currentCallRef.current.callId) {
             console.log("❄️ ICE candidate callId mismatch, ignoring")
             return
           }
-//           const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"];
-// events.forEach((event) => socket.off(event));
 
           if (peerConnectionRef.current && data.candidate) {
             try {
@@ -614,10 +577,12 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
           }
         }
 
-        
+        // Clear existing listeners
+        const events = ["incoming-call", "call-accepted", "call-rejected", "call-ended", "ice-candidate"]
+        events.forEach((event) => socket.off(event))
 
-        // Set up event listeners
-        socket.on("incoming-call", handleIncomingCall);
+        // Set up new event listeners
+        socket.on("incoming-call", handleIncomingCall)
         socket.on("call-accepted", handleCallAccepted)
         socket.on("call-rejected", handleCallRejected)
         socket.on("call-ended", handleCallEnded)
@@ -625,15 +590,22 @@ export const useCallSocket = ({ currentUserId }: UseCallSocketProps) => {
 
         console.log("✅ Call event listeners setup complete")
 
-        // cleanup = () => {
-        //   events.forEach((event) => socket.off(event))
-        // }
+        // Return cleanup function
+        return () => {
+          events.forEach((event) => socket.off(event))
+        }
       } catch (error) {
         logError("Error initializing socket for calls", error)
+        return undefined
       }
     }
 
-    const initTimeout = setTimeout(initSocket, 100)
+    let cleanup: (() => void) | undefined
+
+    const initTimeout = setTimeout(async () => {
+      cleanup = await initSocket()
+    }, 100)
+
     return () => {
       clearTimeout(initTimeout)
       cleanup?.()

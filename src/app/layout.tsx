@@ -1,7 +1,8 @@
+// app/RootLayout.tsx
 import type { Metadata } from "next";
-
 import "./globals.css";
 import { Providers } from "./redux/provider";
+import { FCMProvider } from "@/components/FCMProvider";
 
 
 
@@ -12,13 +13,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
- 
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-  <head>
+      <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -37,10 +35,13 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body
-        className="antialiased"
-      >
-       <Providers>{children}</Providers>
+      <body className="antialiased">
+          <Providers>
+            <FCMProvider>
+            {children}
+            </FCMProvider>
+            </Providers>
+        
       </body>
     </html>
   );
