@@ -59,8 +59,9 @@ export default function CallModal({
   callError,
   deviceStatus,
 }: CallModalProps) {
-   const isAndroid = /Android/i.test(navigator.userAgent);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isAndroid = /Android/i.test(userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
   const isMobile = isAndroid || isIOS;
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
