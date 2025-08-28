@@ -5,14 +5,28 @@ let ringtoneAudio: HTMLAudioElement | null = null;
 let audioContext: AudioContext | null = null;
 let wakeLock: any = null;
 
-// Device compatibility detection
-const isAndroid = /Android/i.test(navigator.userAgent);
-const androidVersion = isAndroid ? parseFloat(navigator.userAgent.match(/Android (\d+\.?\d*)/)?.[1] || '0') : 0;
-const isLegacyAndroid = androidVersion > 0 && androidVersion < 11;
+// Device compatibility detection - only run on client
+const getDeviceInfo = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { isAndroid: false, androidVersion: 0, isLegacyAndroid: false };
+  }
+  
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const androidVersion = isAndroid ? parseFloat(navigator.userAgent.match(/Android (\d+\.?\d*)/)?.[1] || '0') : 0;
+  const isLegacyAndroid = androidVersion > 0 && androidVersion < 11;
+  
+  return { isAndroid, androidVersion, isLegacyAndroid };
+};
 
 // Initialize audio with compatibility checks
 export const initCallAudio = async () => {
+  if (typeof window === 'undefined') {
+    console.warn('🎵 Audio initialization skipped - running on server');
+    return false;
+  }
+
   try {
+    const { isAndroid, androidVersion } = getDeviceInfo();
     console.log(`🎵 Initializing audio for ${isAndroid ? `Android ${androidVersion}` : 'other platform'}`);
     
     // Request wake lock for Android to prevent screen sleep during calls
@@ -49,6 +63,8 @@ export const initCallAudio = async () => {
 
 // Create audio elements with fallbacks
 const createAudioElements = async () => {
+  if (typeof window === 'undefined') return;
+
   try {
     // Create incoming call audio with multiple sources
     incomingCallAudio = new Audio();
@@ -121,6 +137,8 @@ const createAudioElements = async () => {
 
 // Resume audio context on user interaction
 export const resumeAudioContext = async () => {
+  if (typeof window === 'undefined') return false;
+
   if (audioContext && audioContext.state === 'suspended') {
     try {
       await audioContext.resume();
@@ -136,6 +154,8 @@ export const resumeAudioContext = async () => {
 
 // Enhanced play incoming call sound with fallbacks
 export const playIncomingCallSound = async () => {
+  if (typeof window === 'undefined') return false;
+
   try {
     console.log('📞 Playing incoming call sound...');
     
@@ -148,6 +168,7 @@ export const playIncomingCallSound = async () => {
         incomingCallAudio.currentTime = 0;
         
         // For Android, set additional properties
+        const { isAndroid } = getDeviceInfo();
         if (isAndroid) {
           incomingCallAudio.muted = false;
           incomingCallAudio.volume = 1.0;
@@ -171,6 +192,7 @@ export const playIncomingCallSound = async () => {
   } catch (error) {
     console.warn('Error playing incoming call sound:', error);
     // Last resort: vibration for Android
+    const { isAndroid } = getDeviceInfo();
     if (isAndroid && 'vibrate' in navigator) {
       navigator.vibrate([1000, 500, 1000, 500, 1000]);
       console.log('📳 Using vibration as audio fallback');
@@ -181,6 +203,8 @@ export const playIncomingCallSound = async () => {
 
 // Enhanced fallback ringtone with Web Audio API
 export const createFallbackRingtone = async () => {
+  if (typeof window === 'undefined') return;
+
   try {
     if (!audioContext) {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -247,6 +271,8 @@ export const createFallbackRingtone = async () => {
 
 // Simple beep fallback
 export const createFallbackBeep = () => {
+  if (typeof window === 'undefined') return;
+
   try {
     if (!audioContext) return;
     
@@ -273,6 +299,8 @@ export const createFallbackBeep = () => {
 
 // Stop incoming call sound
 export const stopIncomingCallSound = () => {
+  if (typeof window === 'undefined') return;
+
   try {
     if (incomingCallAudio) {
       incomingCallAudio.pause();
@@ -293,12 +321,15 @@ export const stopIncomingCallSound = () => {
 
 // Play ringtone during outgoing calls
 export const playRingtone = async () => {
+  if (typeof window === 'undefined') return;
+
   try {
     await resumeAudioContext();
     
     if (ringtoneAudio) {
       ringtoneAudio.currentTime = 0;
       
+      const { isAndroid } = getDeviceInfo();
       if (isAndroid) {
         ringtoneAudio.muted = false;
         ringtoneAudio.volume = 0.9;
@@ -318,6 +349,8 @@ export const playRingtone = async () => {
 
 // Stop ringtone
 export const stopRingtone = () => {
+  if (typeof window === 'undefined') return;
+
   try {
     if (ringtoneAudio) {
       ringtoneAudio.pause();
@@ -331,6 +364,16 @@ export const stopRingtone = () => {
 
 // Enhanced user media constraints for Android 11+ compatibility
 export const getCompatibleMediaConstraints = (isVideo: boolean = false) => {
+  if (typeof window === 'undefined') {
+    // Return basic constraints for SSR
+    return {
+      audio: true,
+      video: isVideo
+    };
+  }
+
+  const { isLegacyAndroid } = getDeviceInfo();
+  
   const baseConstraints: MediaStreamConstraints = {
     audio: {
       echoCancellation: true,
@@ -369,6 +412,16 @@ export const getCompatibleMediaConstraints = (isVideo: boolean = false) => {
 
 // Check if device supports modern WebRTC features
 export const checkWebRTCSupport = () => {
+  if (typeof window === 'undefined') {
+    return {
+      getUserMedia: false,
+      RTCPeerConnection: false,
+      audioContext: false,
+      wakeLock: false,
+      vibrate: false
+    };
+  }
+
   const support = {
     getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
     RTCPeerConnection: !!(window.RTCPeerConnection || (window as any).webkitRTCPeerConnection),
@@ -383,6 +436,9 @@ export const checkWebRTCSupport = () => {
 
 // Request necessary permissions for Android
 export const requestAndroidPermissions = async () => {
+  if (typeof window === 'undefined') return false;
+  
+  const { isAndroid } = getDeviceInfo();
   if (!isAndroid) return true;
   
   try {
@@ -400,6 +456,8 @@ export const requestAndroidPermissions = async () => {
 
 // Cleanup with wake lock release
 export const cleanupCallAudio = () => {
+  if (typeof window === 'undefined') return;
+
   try {
     if (incomingCallAudio) {
       incomingCallAudio.pause();
@@ -433,6 +491,11 @@ export const cleanupCallAudio = () => {
 
 // Initialize on page load with user interaction detection
 export const initializeWithUserInteraction = () => {
+  if (typeof window === 'undefined') {
+    console.log('🎵 Skipping audio initialization on server');
+    return;
+  }
+
   const events = ['click', 'touchstart', 'keydown'];
   
   const initHandler = async () => {
@@ -451,7 +514,9 @@ export const initializeWithUserInteraction = () => {
   });
 };
 
-// Auto-initialize when module loads
-if (typeof window !== 'undefined') {
-  initializeWithUserInteraction();
-}
+// Safe initialization that only runs on client
+export const safeInitialize = () => {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    initializeWithUserInteraction();
+  }
+};
