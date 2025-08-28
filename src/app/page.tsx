@@ -58,7 +58,7 @@ export default function HomePage() {
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const chatusers = useSelector((state: RootState) => state.user.chatusers);
   const [callError, setCallError] = useState<string | null>(null);
-const [isClient, setIsClient] = useState(false);
+
   // Mobile state management
   const [isMobile, setIsMobile] = useState(false);
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
@@ -122,14 +122,10 @@ const [isClient, setIsClient] = useState(false);
     ensureSocketConnected,
   } = useCallSocket({ currentUserId });
 
-   useEffect(() => {
-    setIsClient(true);
-  }, []);
+  
 
   // Mobile detection and resize handler
   useEffect(() => {
-    if (!isClient) return;
-
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
@@ -143,7 +139,14 @@ const [isClient, setIsClient] = useState(false);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [dispatch, isClient]);
+  }, [dispatch]);
+
+  // Auto-show chat when user/group is selected on mobile
+  useEffect(() => {
+    if (isMobile && (selectedUser || selectedGroup)) {
+      setShowChatOnMobile(true);
+    }
+  }, [selectedUser, selectedGroup, isMobile]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -151,9 +154,7 @@ const [isClient, setIsClient] = useState(false);
     socketService.connect(currentUserId);
   }, [currentUserId]);
 
-   useEffect(() => {
-    if (!isClient) return;
-
+  useEffect(() => {
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
     const userName = localStorage.getItem("currentUserName") || "Current User";
     setCurrentUserId(userId);
@@ -163,25 +164,20 @@ const [isClient, setIsClient] = useState(false);
     if (lastUserId) {
       setInitialSelectedUserId(lastUserId);
     }
-  }, [isClient]);
+  }, []);
 
   useEffect(() => {
-    if (!isClient) return;
-
     const saved = localStorage.getItem("theme");
     if (saved === "dark" || saved === "light") {
       setIsDark(saved === "dark");
-    } else {
-      // Check system preference only on client
+    } else if (typeof window !== "undefined" && window.matchMedia) {
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       setIsDark(prefersDark);
       localStorage.setItem("theme", prefersDark ? "dark" : "light");
     }
-  }, [isClient]);
+  }, []);
 
- const toggleTheme = () => {
-    if (!isClient) return;
-
+  const toggleTheme = () => {
     setIsDark((prev) => {
       const next = !prev;
       try {
@@ -192,16 +188,6 @@ const [isClient, setIsClient] = useState(false);
       return next;
     });
   };
-
-   if (!isClient) {
-    return (
-      <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      </div>
-    );
-  }
 
   // Auto-open group
   useEffect(() => {
@@ -374,18 +360,6 @@ const [isClient, setIsClient] = useState(false);
   // Device check helper
   const checkDevices = async (): Promise<{ camera: boolean; microphone: boolean }> => {
     try {
-      // Check if we're in a browser environment and navigator exists
-      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-        console.warn('Navigator not available - likely running on server');
-        return { camera: false, microphone: false };
-      }
-
-      // Check if mediaDevices API is supported
-      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        console.warn('MediaDevices API not supported');
-        return { camera: false, microphone: false };
-      }
-
       const devices = await navigator.mediaDevices.enumerateDevices();
       const hasCamera = devices.some(device => device.kind === "videoinput");
       const hasMicrophone = devices.some(device => device.kind === "audioinput");
@@ -398,18 +372,13 @@ const [isClient, setIsClient] = useState(false);
   };
 
   // Call handlers with proper error handling
-   const handleVideoCall = async (userId: string, name?: string) => {
+  const handleVideoCall = async (userId: string, name?: string) => {
     try {
       console.log('Starting video call to:', userId, name);
       setCallError(null);
       setCurrentCallType("video");
       
       setDeviceStatus({ camera: false, microphone: false, checking: true });
-
-      // Safe navigator check
-      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-        throw new Error("Video calling is not available on this platform");
-      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Video calling is not supported in your browser");
@@ -462,18 +431,13 @@ const [isClient, setIsClient] = useState(false);
     }
   };
 
-   const handleVoiceCall = async (userId: string, name?: string) => {
+  const handleVoiceCall = async (userId: string, name?: string) => {
     try {
       console.log("Starting voice call to:", userId, name);
       setCallError(null);
       setCurrentCallType("audio");
       
       setDeviceStatus({ camera: false, microphone: false, checking: true });
-
-      // Safe navigator check
-      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-        throw new Error("Voice calling is not available on this platform");
-      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Voice calling is not supported in your browser");
