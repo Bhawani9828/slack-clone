@@ -374,6 +374,18 @@ const [isClient, setIsClient] = useState(false);
   // Device check helper
   const checkDevices = async (): Promise<{ camera: boolean; microphone: boolean }> => {
     try {
+      // Check if we're in a browser environment and navigator exists
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        console.warn('Navigator not available - likely running on server');
+        return { camera: false, microphone: false };
+      }
+
+      // Check if mediaDevices API is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        console.warn('MediaDevices API not supported');
+        return { camera: false, microphone: false };
+      }
+
       const devices = await navigator.mediaDevices.enumerateDevices();
       const hasCamera = devices.some(device => device.kind === "videoinput");
       const hasMicrophone = devices.some(device => device.kind === "audioinput");
@@ -386,13 +398,18 @@ const [isClient, setIsClient] = useState(false);
   };
 
   // Call handlers with proper error handling
-  const handleVideoCall = async (userId: string, name?: string) => {
+   const handleVideoCall = async (userId: string, name?: string) => {
     try {
       console.log('Starting video call to:', userId, name);
       setCallError(null);
       setCurrentCallType("video");
       
       setDeviceStatus({ camera: false, microphone: false, checking: true });
+
+      // Safe navigator check
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        throw new Error("Video calling is not available on this platform");
+      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Video calling is not supported in your browser");
@@ -445,13 +462,18 @@ const [isClient, setIsClient] = useState(false);
     }
   };
 
-  const handleVoiceCall = async (userId: string, name?: string) => {
+   const handleVoiceCall = async (userId: string, name?: string) => {
     try {
       console.log("Starting voice call to:", userId, name);
       setCallError(null);
       setCurrentCallType("audio");
       
       setDeviceStatus({ camera: false, microphone: false, checking: true });
+
+      // Safe navigator check
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        throw new Error("Voice calling is not available on this platform");
+      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Voice calling is not supported in your browser");
