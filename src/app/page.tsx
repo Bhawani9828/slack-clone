@@ -58,7 +58,7 @@ export default function HomePage() {
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const chatusers = useSelector((state: RootState) => state.user.chatusers);
   const [callError, setCallError] = useState<string | null>(null);
-
+const [isClient, setIsClient] = useState(false);
   // Mobile state management
   const [isMobile, setIsMobile] = useState(false);
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
@@ -122,8 +122,14 @@ export default function HomePage() {
     ensureSocketConnected,
   } = useCallSocket({ currentUserId });
 
+   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Mobile detection and resize handler
   useEffect(() => {
+    if (!isClient) return;
+
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
@@ -137,14 +143,7 @@ export default function HomePage() {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [dispatch]);
-
-  // Auto-show chat when user/group is selected on mobile
-  useEffect(() => {
-    if (isMobile && (selectedUser || selectedGroup)) {
-      setShowChatOnMobile(true);
-    }
-  }, [selectedUser, selectedGroup, isMobile]);
+  }, [dispatch, isClient]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -152,7 +151,9 @@ export default function HomePage() {
     socketService.connect(currentUserId);
   }, [currentUserId]);
 
-  useEffect(() => {
+   useEffect(() => {
+    if (!isClient) return;
+
     const userId = localStorage.getItem("currentUserId") || "665a3e2855e5679c37d44c12";
     const userName = localStorage.getItem("currentUserName") || "Current User";
     setCurrentUserId(userId);
@@ -162,20 +163,25 @@ export default function HomePage() {
     if (lastUserId) {
       setInitialSelectedUserId(lastUserId);
     }
-  }, []);
+  }, [isClient]);
 
   useEffect(() => {
+    if (!isClient) return;
+
     const saved = localStorage.getItem("theme");
     if (saved === "dark" || saved === "light") {
       setIsDark(saved === "dark");
-    } else if (typeof window !== "undefined" && window.matchMedia) {
+    } else {
+      // Check system preference only on client
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       setIsDark(prefersDark);
       localStorage.setItem("theme", prefersDark ? "dark" : "light");
     }
-  }, []);
+  }, [isClient]);
 
-  const toggleTheme = () => {
+ const toggleTheme = () => {
+    if (!isClient) return;
+
     setIsDark((prev) => {
       const next = !prev;
       try {
@@ -186,6 +192,16 @@ export default function HomePage() {
       return next;
     });
   };
+
+   if (!isClient) {
+    return (
+      <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   // Auto-open group
   useEffect(() => {
