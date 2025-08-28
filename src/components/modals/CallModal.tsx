@@ -59,7 +59,7 @@ export default function CallModal({
   callError,
   deviceStatus,
 }: CallModalProps) {
-    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isAndroid = /Android/i.test(userAgent);
   const isIOS = /iPad|iPhone|iPod/.test(userAgent);
   const isMobile = isAndroid || isIOS;
@@ -181,16 +181,12 @@ export default function CallModal({
           // For mobile devices, also use vibration
           if (isMobile && 'vibrate' in navigator) {
             const vibratePattern = [1000, 500, 1000, 500, 1000, 500];
-           if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-  navigator.vibrate(vibratePattern);
-}
+            navigator.vibrate(vibratePattern);
             
             // Repeat vibration pattern
             vibrationPatternRef.current = setInterval(() => {
               if (isRinging) {
-                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-  navigator.vibrate(vibratePattern);
-}
+                navigator.vibrate(vibratePattern);
               }
             }, 4000);
           }
@@ -225,11 +221,10 @@ export default function CallModal({
           ringtoneSoundRef.current.currentTime = 0;
         }
         
-        
         // Stop vibration
-     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-  navigator.vibrate(0);
-}
+        if ('vibrate' in navigator) {
+          navigator.vibrate(0);
+        }
         
         if (vibrationPatternRef.current) {
           clearInterval(vibrationPatternRef.current);
@@ -361,8 +356,6 @@ export default function CallModal({
 
   // Handle fullscreen toggle
   const toggleFullscreen = () => {
-    if (typeof document === 'undefined') return;
-      
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
         console.warn('Failed to enter fullscreen:', err);
