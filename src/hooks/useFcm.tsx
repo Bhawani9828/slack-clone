@@ -1,4 +1,4 @@
-// hooks/useFcm.ts - FIXED VERSION
+// hooks/useFcm.ts - COMPLETE FIXED VERSION
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFcmToken, onForegroundMessage, isFcmSupported } from '@/lib/firebaseClient';
 import { toast } from 'react-hot-toast';
@@ -10,14 +10,19 @@ interface FCMData {
   senderAvatar?: string;
   chatId?: string;
   callType?: string;
+  title?: string;
+  body?: string;
 }
 
 interface FCMPayload {
   notification?: {
     title?: string;
     body?: string;
+    image?: string;
   };
   data?: FCMData;
+  from?: string;
+  messageId?: string;
 }
 
 export const useFcm = (currentUserId?: string) => {
@@ -26,50 +31,52 @@ export const useFcm = (currentUserId?: string) => {
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(false);
   const [isClient, setIsClient] = useState(false);
-  const initializationRef = useRef<boolean>(false);
-  const tokenRegistrationRef = useRef<boolean>(false);
+  const messageListenerRef = useRef<(() => void) | null>(null);
 
   // Check if we're on the client side
   useEffect(() => {
     setIsClient(true);
-    const checkSupport = async () => {
-      const isSupported = await isFcmSupported();
-      setSupported(isSupported);
-      console.log('🔍 FCM Support check:', isSupported);
-    };
-    checkSupport();
+    console.log('🏠 Client detected');
   }, []);
 
-  // Register token with backend - Fixed with proper error handling
+  // Check FCM support
+  useEffect(() => {
+    if (!isClient) return;
+
+    const checkSupport = async () => {
+      try {
+        const isFcmSupportedResult = await isFcmSupported();
+        setSupported(isFcmSupportedResult);
+        console.log('🔍 FCM Support:', isFcmSupportedResult);
+      } catch (err) {
+        console.error('❌ Error checking FCM support:', err);
+        setSupported(false);
+      }
+    };
+
+    checkSupport();
+  }, [isClient]);
+
+  // Register token with backend
   const registerToken = useCallback(async (fcmToken: string): Promise<boolean> => {
     if (!isClient || !currentUserId || !fcmToken) {
-      console.log('❌ Missing parameters for token registration:', {
-        isClient, hasUserId: !!currentUserId, hasToken: !!fcmToken
-      });
+      console.log('❌ Missing parameters for token registration');
       return false;
     }
 
-    // Avoid duplicate registrations
-    if (tokenRegistrationRef.current) {
-      console.log('⏳ Token registration already in progress');
-      return true;
-    }
-
     try {
-      tokenRegistrationRef.current = true;
-      
-      // Dynamic import to avoid SSR issues
       const { default: Cookies } = await import('js-cookie');
-      
       const authToken = Cookies.get('auth_token');
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
       if (!apiUrl) {
-        throw new Error('API URL not configured');
+        console.error('❌ API URL not configured');
+        return false;
       }
 
       if (!authToken) {
-        throw new Error('No authentication token found');
+        console.error('❌ No authentication token found');
+        return false;
       }
 
       console.log('📤 Registering FCM token with backend...');
@@ -99,70 +106,61 @@ export const useFcm = (currentUserId?: string) => {
     } catch (err) {
       console.error('❌ Error registering FCM token:', err);
       return false;
-    } finally {
-      tokenRegistrationRef.current = false;
     }
   }, [isClient, currentUserId]);
 
-  // Show notification toast
+  // Show notification
   const showNotification = useCallback((payload: FCMPayload) => {
     if (!isClient) return;
 
-    const { notification, data } = payload;
-    const { type, senderName, senderAvatar, chatId } = data || {};
+    console.log('🎯 Processing notification:', payload);
 
-    const title = notification?.title || senderName || 'New Message';
-    const body = notification?.body || 'You have a new message';
+    const notification = payload.notification;
+    const data = payload.data;
+    
+    const title = notification?.title || data?.title || 'New Message';
+    const body = notification?.body || data?.body || 'You have a new message';
+    const type = data?.type || 'message';
 
     console.log('🔔 Showing notification:', { title, body, type });
 
-    if (type === 'message') {
-      toast.custom((t) => (
-        <div
-          className={`flex items-center p-4 bg-white rounded-lg shadow-lg border transition-all duration-300 ${
-            t.visible ? 'animate-enter' : 'animate-leave'
-          }`}
-          style={{ maxWidth: '400px' }}
-        >
-          <img
-            src={senderAvatar || '/default-avatar.png'}
-            alt={senderName || 'User'}
-            className="w-10 h-10 rounded-full mr-3 object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/default-avatar.png';
-            }}
-          />
-          <div className="flex-1">
-            <p className="font-medium text-gray-900 text-sm">{title}</p>
-            <p className="text-gray-600 text-xs mt-1">{body}</p>
-          </div>
+    // Show toast notification
+    toast.custom((t) => (
+      <div
+        className={`flex items-center p-4 bg-white rounded-lg shadow-lg border transition-all duration-300 ${
+          t.visible ? 'animate-enter' : 'animate-leave'
+        }`}
+        style={{ maxWidth: '400px' }}
+      >
+        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+          <span className="text-white text-lg">
+            {type === 'call' ? '📞' : '💬'}
+          </span>
+        </div>
+        <div className="flex-1">
+          <p className="font-medium text-gray-900 text-sm">{title}</p>
+          <p className="text-gray-600 text-xs mt-1">{body}</p>
+        </div>
+        {data?.chatId && (
           <button
             onClick={() => {
               toast.dismiss(t.id);
-              if (chatId) {
-                window.location.href = `/chat/${chatId}`;
-              }
+              window.location.href = `/chat/${data.chatId}`;
             }}
             className="ml-3 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
           >
             View
           </button>
-        </div>
-      ), {
-        duration: 5000,
-        position: 'top-right',
-      });
-    } else {
-      toast(body, {
-        icon: type === 'call' ? '📞' : '💬',
-        duration: type === 'call' ? 10000 : 4000,
-        position: 'top-right',
-      });
-    }
+        )}
+      </div>
+    ), {
+      duration: type === 'call' ? 10000 : 5000,
+      position: 'top-right',
+    });
 
     // Play notification sound
     try {
-      const audio = new Audio('/sounds/notification.mp3');
+      const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
       audio.volume = 0.3;
       audio.play().catch(() => {
         console.log('🔇 Could not play notification sound');
@@ -172,7 +170,7 @@ export const useFcm = (currentUserId?: string) => {
     }
   }, [isClient]);
 
-  // Initialize FCM - PROPERLY SEPARATED
+  // Initialize FCM
   useEffect(() => {
     if (!isClient || !currentUserId || !supported) {
       console.log('⏸️ FCM initialization skipped:', { 
@@ -181,44 +179,11 @@ export const useFcm = (currentUserId?: string) => {
       return;
     }
 
-    // Avoid duplicate initialization
-    if (initializationRef.current) {
-      console.log('⏸️ FCM already initialized');
-      return;
-    }
-
     let isMounted = true;
 
     const initializeFCM = async () => {
       try {
         console.log('🚀 Starting FCM initialization...');
-        initializationRef.current = true;
-        setError(null);
-
-        // Wait for app to be fully loaded
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        if (!isMounted) return;
-
-        // Check notification permission
-        if (Notification.permission === 'default') {
-          console.log('📋 Requesting notification permission...');
-          const permission = await Notification.requestPermission();
-          
-          if (!isMounted) return;
-          
-          if (permission !== 'granted') {
-            setError('Notification permission denied');
-            console.log('❌ Notification permission denied');
-            return;
-          }
-        }
-
-        if (Notification.permission !== 'granted') {
-          setError('Notification permission required');
-          console.log('❌ Notification permission required');
-          return;
-        }
 
         // Get FCM token
         console.log('🎯 Getting FCM token...');
@@ -256,7 +221,6 @@ export const useFcm = (currentUserId?: string) => {
       }
     };
 
-    // Start initialization
     initializeFCM();
 
     return () => {
@@ -264,40 +228,42 @@ export const useFcm = (currentUserId?: string) => {
     };
   }, [isClient, currentUserId, supported, registerToken]);
 
-  // Setup foreground message listener - FIXED ASYNC HANDLING
+  // Setup message listener
   useEffect(() => {
     if (!ready || !isClient) {
-      console.log('⏸️ Foreground listener setup skipped:', { ready, isClient });
+      console.log('⏸️ Message listener setup skipped:', { ready, isClient });
       return;
     }
 
     let isMounted = true;
-    let unsubscribe: (() => void) | null = null;
 
     const setupMessageListener = async () => {
       try {
-        console.log('🔊 Setting up FCM foreground message listener...');
+        console.log('🔊 Setting up FCM message listener...');
         
-        // ✅ FIXED: Properly handle the Promise
-        const unsubscribeFunction = await onForegroundMessage((payload) => {
-          console.log('📨 FCM foreground message received:', payload);
-          console.log('📨 Notification data:', payload.notification);
-          console.log('📨 Custom data:', payload.data);
+        const unsubscribe = await onForegroundMessage((payload) => {
+          if (!isMounted) return;
           
-          // Only show notification if app is in foreground and visible
-          if (!document.hidden && isMounted) {
+          console.log('📨 FCM message received:', {
+            notification: payload.notification,
+            data: payload.data,
+            messageId: payload.messageId
+          });
+          
+          // Show notification only if app is visible
+          if (!document.hidden) {
             showNotification(payload);
           } else {
-            console.log('📱 App is hidden, skipping foreground notification');
+            console.log('📱 App is hidden, notification will be shown by service worker');
           }
         });
 
-        if (unsubscribeFunction && isMounted) {
-          unsubscribe = unsubscribeFunction;
-          console.log('✅ FCM foreground listener setup complete');
+        if (unsubscribe && isMounted) {
+          messageListenerRef.current = unsubscribe;
+          console.log('✅ FCM message listener setup complete');
         }
       } catch (err) {
-        console.error('❌ Error setting up FCM foreground listener:', err);
+        console.error('❌ Error setting up message listener:', err);
       }
     };
 
@@ -305,65 +271,19 @@ export const useFcm = (currentUserId?: string) => {
 
     return () => {
       isMounted = false;
-      if (unsubscribe) {
-        console.log('🔄 Cleaning up FCM foreground listener');
-        unsubscribe();
+      if (messageListenerRef.current) {
+        console.log('🔄 Cleaning up message listener');
+        messageListenerRef.current();
+        messageListenerRef.current = null;
       }
     };
   }, [ready, isClient, showNotification]);
-
-  // Token refresh on visibility change
-  useEffect(() => {
-    if (!ready || !isClient || !currentUserId) {
-      return;
-    }
-
-    const handleVisibilityChange = async () => {
-      if (!document.hidden) {
-        try {
-          // Refresh token when app becomes visible
-          console.log('👁️ App became visible, checking token...');
-          const newToken = await getFcmToken();
-          if (newToken && newToken !== token) {
-            console.log('🔄 Refreshing FCM token');
-            setToken(newToken);
-            await registerToken(newToken);
-          }
-        } catch (err) {
-          console.error('❌ Token refresh failed:', err);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [ready, isClient, currentUserId, token, registerToken]);
-
-  // Reset when user changes
-  useEffect(() => {
-    console.log('👤 User changed, resetting FCM state');
-    setReady(false);
-    setToken(null);
-    setError(null);
-    initializationRef.current = false;
-    tokenRegistrationRef.current = false;
-  }, [currentUserId]);
 
   return { 
     ready, 
     token, 
     error, 
     supported,
-    registerToken,
-    isInitialized: initializationRef.current,
-    // Debug info
-    debugInfo: {
-      isClient,
-      hasUser: !!currentUserId,
-      notificationPermission: typeof window !== 'undefined' ? Notification.permission : 'unknown'
-    }
+    registerToken 
   };
 };

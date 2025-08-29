@@ -1,121 +1,76 @@
-// public/firebase-messaging-sw.js - Updated Service Worker
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
-
-console.log("🔹 Service Worker file loaded");
+// public/firebase-messaging-sw.js
+importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDvXxvp2AB5jU_exDIl9IqC46rzeYQhUCc",
-  authDomain: "whats-web-app-51590.firebaseapp.com",
-  projectId: "whats-web-app-51590",
-  storageBucket: "whats-web-app-51590.firebasestorage.app",
-  messagingSenderId: "461402838055",
-  appId: "1:461402838055:web:ad1db99758a02ccd1c6a02"
+  apiKey: "<?= process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?>",
+  authDomain: "<?= process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?>",
+  projectId: "<?= process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?>",
+  storageBucket: "<?= process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?>",
+  messagingSenderId: "<?= process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?>",
+  appId: "<?= process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?>"
 };
 
-let firebaseApp = null;
-let messaging = null;
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
 
-try {
-  firebaseApp = firebase.initializeApp(firebaseConfig);
-  console.log("✅ Firebase initialized in Service Worker");
-} catch (err) {
-  console.error("❌ Error initializing Firebase in SW:", err);
-}
-
-try {
-  messaging = firebase.messaging();
-  console.log("✅ Messaging initialized in Service Worker");
-} catch (err) {
-  console.error("❌ Error initializing Messaging in SW:", err);
-}
-
-// Activate immediately
-self.addEventListener('install', (event) => {
-  console.log('🔹 Service Worker installing...');
-  self.skipWaiting(); // Force activation
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('🔹 Service Worker activating...');
-  event.waitUntil(
-    clients.claim().then(() => {
-      console.log('✅ Service Worker activated and claiming clients');
-    })
-  );
-});
-
-// Handle background messages
-if (messaging) {
-  messaging.onBackgroundMessage((payload) => {
-    console.log('📩 Background Message received:', payload);
-
-    const { title, body, icon, image } = payload.notification || {};
-    const { type, senderId, senderName, chatId } = payload.data || {};
-
-    const notificationTitle = title || 'New Message';
-    const notificationOptions = {
-      body: body || 'You have a new message',
-      icon: icon || '/icons/notification-icon.png',
-      badge: '/icons/badge-icon.png',
-      image: image,
-      tag: `chat-${chatId || senderId}`,
-      requireInteraction: true,
-      data: {
-        type,
-        senderId,
-        senderName,
-        chatId,
-        url: chatId ? `/chat/${chatId}` : `/chat`,
+// Background message handler
+messaging.onBackgroundMessage((payload) => {
+  console.log('📨 Background message received:', payload);
+  
+  const notificationTitle = payload.notification?.title || 'New Message';
+  const notificationOptions = {
+    body: payload.notification?.body || 'You have a new message',
+    icon: '/icon-192x192.png',
+    badge: '/badge-72x72.png',
+    data: payload.data || {},
+    tag: `bg-${Date.now()}`,
+    requireInteraction: true,
+    actions: [
+      {
+        action: 'open',
+        title: 'Open App'
       },
-      actions: [
-        { action: 'open_chat', title: 'Open Chat' },
-        { action: 'mark_read', title: 'Mark as Read' }
-      ]
-    };
+      {
+        action: 'dismiss',
+        title: 'Dismiss'
+      }
+    ]
+  };
 
-    console.log("🔹 Showing notification:", notificationTitle, notificationOptions);
-    return self.registration.showNotification(notificationTitle, notificationOptions);
-  });
-} else {
-  console.warn("⚠️ Messaging not initialized in Service Worker");
-}
+  // Show notification
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
 
-// Handle notification clicks
+// Notification click handler
 self.addEventListener('notificationclick', (event) => {
-  console.log('🖱️ Notification clicked:', event);
+  console.log('🔔 Notification clicked:', event.notification);
+  
   event.notification.close();
 
-  const { action, notification } = event;
-  const { type, chatId, senderId, url } = notification.data || {};
-
-  if (action === 'mark_read') {
-    console.log("🔹 Mark as Read clicked for chat:", chatId, "sender:", senderId);
-    fetch('/api/messages/mark-read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, senderId })
-    }).then(() => console.log("✅ Mark as read request sent"))
-      .catch(err => console.error("❌ Error in mark-read fetch:", err));
-    return;
-  }
-
-  const targetUrl = url || '/chat';
-  console.log("🔹 Opening/focusing window at:", targetUrl);
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        for (const client of clientList) {
-          if (client.url.includes(targetUrl) && 'focus' in client) {
-            console.log("✅ Focusing existing client:", client.url);
+  if (event.action === 'open') {
+    const urlToOpen = new URL('/', self.location.origin).href;
+    
+    event.waitUntil(
+      clients.matchAll({type: 'window'}).then((windowClients) => {
+        for (const client of windowClients) {
+          if (client.url === urlToOpen && 'focus' in client) {
             return client.focus();
           }
         }
+        
         if (clients.openWindow) {
-          console.log("✅ Opening new client window at:", targetUrl);
-          return clients.openWindow(targetUrl);
+          return clients.openWindow(urlToOpen);
         }
       })
-  );
+    );
+  }
+});
+
+// Listen for messages from main thread
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
