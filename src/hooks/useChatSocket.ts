@@ -117,61 +117,68 @@ export const useChatSocket = (
     console.log('📡 Setting up message listeners for channel:', channelId);
 
     // FIXED: Immediate message handler - no delays
-    const receiveMessageHandler = (msg: any) => {
-      console.log('📥 INSTANT message received:', msg);
-      
-      if (!msg || !msg.content) {
-        console.warn('⚠️ Received invalid message:', msg);
-        return;
-      }
+   const receiveMessageHandler = (msg: any) => {
+  console.log('📥 INSTANT message received:', msg);
+  
+  if (!msg || !msg.content) {
+    console.warn('⚠️ Received invalid message:', msg);
+    return;
+  }
 
-      // Check if this message belongs to current conversation
-      const isRelevant = 
-        (msg.senderId === receiverId && msg.receiverId === currentUserId) ||
-        (msg.senderId === currentUserId && msg.receiverId === receiverId);
+  const isRelevant =
+    (msg.senderId === receiverId && msg.receiverId === currentUserId) ||
+    (msg.senderId === currentUserId && msg.receiverId === receiverId);
 
-     if (!isRelevant) {
-      console.log('Message not relevant to current chat');
-      return;
-     }
+  // 🔑 Ye flag rakho: kya currently ye chat window open hai?
+  const isChatOpen = msg.senderId === receiverId; 
 
-      console.log('✅ Processing RELEVANT message INSTANTLY:', msg.content);
+  if (!isRelevant) {
+    console.log('Message not relevant to current chat');
+    return;
+  }
 
-      // Process message IMMEDIATELY - no setTimeout
-      const newMessage = {
-        _id: msg._id || `temp-${Date.now()}-${Math.random()}`,
-        senderId: msg.senderId,
-        receiverId: msg.receiverId,
-        content: msg.content,
-        type: msg.type || 'text',
-        createdAt: msg.createdAt || new Date().toISOString(),
-        isSent: msg.senderId === currentUserId,
-        isDelivered: msg.senderId !== currentUserId, 
-        isRead: msg.isRead || false,
-        fileUrl: msg.fileUrl || '',
-        fileName: msg.fileName || '',
-        fileSize: msg.fileSize || '',
-        channelId: msg.channelId || channelId
-      };
+  console.log('✅ Processing RELEVANT message INSTANTLY:', msg.content);
 
-      // IMMEDIATELY dispatch to Redux store
-      dispatch(addMessage(newMessage));
-      console.log('📨 Message added to store instantly!');
+  const newMessage = {
+    _id: msg._id || `temp-${Date.now()}-${Math.random()}`,
+    senderId: msg.senderId,
+    receiverId: msg.receiverId,
+    content: msg.content,
+    type: msg.type || 'text',
+    createdAt: msg.createdAt || new Date().toISOString(),
+    isSent: msg.senderId === currentUserId,
+    isDelivered: msg.senderId !== currentUserId,
+    isRead: msg.isRead || false,
+    fileUrl: msg.fileUrl || '',
+    fileName: msg.fileName || '',
+    fileSize: msg.fileSize || '',
+    channelId: msg.channelId || channelId,
+  };
 
-   
-      
-    
-        
-    
+  dispatch(addMessage(newMessage));
+  console.log('📨 Message added to store instantly!');
 
-      // Auto-mark as read if I'm the receiver
-      if (msg.receiverId === currentUserId && msg._id) {
-        setTimeout(() => {
-          console.log('👁️ Auto-marking message as read:', msg._id);
-          socketService.markAsRead(msg._id, msg.senderId);
-        }, 1000); // Small delay for read receipt
-      }
-    };
+  // ✅ Agar main receiver hu aur chat window open hai → auto mark as read
+  if (msg.receiverId === currentUserId && msg._id) {
+    if (isChatOpen) {
+      setTimeout(() => {
+        console.log('👁️ Auto-marking message as read:', msg._id);
+        socketService.markAsRead(msg._id, msg.senderId);
+      }, 1000);
+    } else {
+      // 🚨 Agar chat open nahi hai → Notification bhejna hai
+      console.log('🔔 Show notification:', msg.content);
+
+      // Example: Firebase notification trigger
+      // firebaseService.showNotification({
+      //   title: msg.senderName || "New Message",
+      //   body: msg.content,
+      //   data: { senderId: msg.senderId }
+      // });
+    }
+  }
+};
+
 
     const messageDeliveredHandler = (data: any) => {
       console.log('📬 Message delivered instantly:', data._id || data.messageId);
@@ -341,6 +348,7 @@ export const useChatSocket = (
       content: content.trim(),
       type,
       chatId: channelId,
+      clientTempId: `temp-${Date.now()}`,
       createdAt: new Date().toISOString(),
       ...additionalData,
     };

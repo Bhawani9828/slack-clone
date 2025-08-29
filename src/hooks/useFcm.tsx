@@ -1,5 +1,5 @@
-// hooks/useFcm.ts - Fixed FCM Hook
-import { useEffect, useState, useCallback } from 'react';
+// hooks/useFcm.ts - FIXED VERSION
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFcmToken, onForegroundMessage, isFcmSupported } from '@/lib/firebaseClient';
 import { toast } from 'react-hot-toast';
 
@@ -26,36 +26,38 @@ export const useFcm = (currentUserId?: string) => {
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(false);
   const [isClient, setIsClient] = useState(false);
-const [userIdLoaded, setUserIdLoaded] = useState(false);
+  const initializationRef = useRef<boolean>(false);
+  const tokenRegistrationRef = useRef<boolean>(false);
+
   // Check if we're on the client side
   useEffect(() => {
     setIsClient(true);
-    setSupported(isFcmSupported());
-    
+    const checkSupport = async () => {
+      const isSupported = await isFcmSupported();
+      setSupported(isSupported);
+      console.log('🔍 FCM Support check:', isSupported);
+    };
+    checkSupport();
   }, []);
 
-  useEffect(() => {
-  if (currentUserId) {
-    setUserIdLoaded(true);
-  }
-}, [currentUserId]);
-
-  // Register token with backend - FIXED: Added proper error handling and logging
+  // Register token with backend - Fixed with proper error handling
   const registerToken = useCallback(async (fcmToken: string): Promise<boolean> => {
-     console.log('🟡 registerToken called with:', {
-    isClient,
-    hasCurrentUserId: !!currentUserId,
-    hasFcmToken: !!fcmToken,
-    fcmTokenLength: fcmToken?.length
-  });
     if (!isClient || !currentUserId || !fcmToken) {
-      console.log('❌ Missing required parameters for registerToken:', {
-        isClient, currentUserId, hasToken: !!fcmToken
+      console.log('❌ Missing parameters for token registration:', {
+        isClient, hasUserId: !!currentUserId, hasToken: !!fcmToken
       });
       return false;
     }
 
+    // Avoid duplicate registrations
+    if (tokenRegistrationRef.current) {
+      console.log('⏳ Token registration already in progress');
+      return true;
+    }
+
     try {
+      tokenRegistrationRef.current = true;
+      
       // Dynamic import to avoid SSR issues
       const { default: Cookies } = await import('js-cookie');
       
@@ -63,20 +65,14 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
       if (!apiUrl) {
-        console.error('❌ API URL not configured');
-        return false;
+        throw new Error('API URL not configured');
       }
 
       if (!authToken) {
-        console.error('❌ No auth token found');
-        return false;
+        throw new Error('No authentication token found');
       }
 
-      console.log('🔹 Registering FCM token with backend...', {
-        token: fcmToken.substring(0, 20) + '...',
-        userId: currentUserId,
-        apiUrl
-      });
+      console.log('📤 Registering FCM token with backend...');
 
       const response = await fetch(`${apiUrl}/auth/fcm-token`, {
         method: 'POST',
@@ -91,20 +87,20 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
         }),
       });
 
-      console.log('🔹 Registration response status:', response.status);
-
       if (response.ok) {
         const responseData = await response.json();
-        console.log('✅ FCM token registered with backend:', responseData);
+        console.log('✅ FCM token registered successfully:', responseData);
         return true;
       } else {
         const errorText = await response.text();
-        console.error('❌ Failed to register token:', response.status, errorText);
+        console.error('❌ Failed to register FCM token:', response.status, errorText);
         return false;
       }
     } catch (err) {
-      console.error('❌ Error registering token:', err);
+      console.error('❌ Error registering FCM token:', err);
       return false;
+    } finally {
+      tokenRegistrationRef.current = false;
     }
   }, [isClient, currentUserId]);
 
@@ -117,6 +113,8 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
 
     const title = notification?.title || senderName || 'New Message';
     const body = notification?.body || 'You have a new message';
+
+    console.log('🔔 Showing notification:', { title, body, type });
 
     if (type === 'message') {
       toast.custom((t) => (
@@ -155,7 +153,6 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
         position: 'top-right',
       });
     } else {
-      // Simple toast for other types
       toast(body, {
         icon: type === 'call' ? '📞' : '💬',
         duration: type === 'call' ? 10000 : 4000,
@@ -168,28 +165,25 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
       const audio = new Audio('/sounds/notification.mp3');
       audio.volume = 0.3;
       audio.play().catch(() => {
-        console.log('🔇 Could not play notification sound (user interaction required)');
+        console.log('🔇 Could not play notification sound');
       });
     } catch (err) {
       console.log('🔇 Audio not available');
     }
   }, [isClient]);
 
-  // Initialize FCM - FIXED: Added better error handling and token registration
+  // Initialize FCM - PROPERLY SEPARATED
   useEffect(() => {
-     console.log('🟡 FCM useEffect triggered', {
-    isClient,
-    currentUserId,
-    supported
-  });
-    if (!isClient || !currentUserId) {
-      console.log('⏳ Waiting for client initialization or user ID');
+    if (!isClient || !currentUserId || !supported) {
+      console.log('⏸️ FCM initialization skipped:', { 
+        isClient, hasUserId: !!currentUserId, supported 
+      });
       return;
     }
 
-    if (!supported) {
-      setError('FCM not supported in this browser');
-      console.log('❌ FCM not supported');
+    // Avoid duplicate initialization
+    if (initializationRef.current) {
+      console.log('⏸️ FCM already initialized');
       return;
     }
 
@@ -197,14 +191,21 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
 
     const initializeFCM = async () => {
       try {
+        console.log('🚀 Starting FCM initialization...');
+        initializationRef.current = true;
         setError(null);
-        console.log('🔹 Initializing FCM...');
+
+        // Wait for app to be fully loaded
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (!isMounted) return;
 
         // Check notification permission
         if (Notification.permission === 'default') {
-          console.log('🔹 Requesting notification permission...');
+          console.log('📋 Requesting notification permission...');
           const permission = await Notification.requestPermission();
-          console.log('🔹 Notification permission:', permission);
+          
+          if (!isMounted) return;
           
           if (permission !== 'granted') {
             setError('Notification permission denied');
@@ -215,12 +216,12 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
 
         if (Notification.permission !== 'granted') {
           setError('Notification permission required');
-          console.log('❌ Notification permission not granted');
+          console.log('❌ Notification permission required');
           return;
         }
 
         // Get FCM token
-        console.log('🔹 Getting FCM token...');
+        console.log('🎯 Getting FCM token...');
         const fcmToken = await getFcmToken();
         
         if (!isMounted) return;
@@ -231,11 +232,11 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
           return;
         }
 
-        console.log('✅ FCM Token obtained:', fcmToken.substring(0, 20) + '...');
+        console.log('✅ FCM Token obtained successfully');
         setToken(fcmToken);
 
-        // Register with backend - FIXED: This is where registerToken should be called
-        console.log('🔹 Registering token with backend...');
+        // Register with backend
+        console.log('📤 Registering token with backend...');
         const registered = await registerToken(fcmToken);
         
         if (!isMounted) return;
@@ -255,6 +256,7 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
       }
     };
 
+    // Start initialization
     initializeFCM();
 
     return () => {
@@ -262,35 +264,68 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
     };
   }, [isClient, currentUserId, supported, registerToken]);
 
-  // Setup foreground message listener
+  // Setup foreground message listener - FIXED ASYNC HANDLING
   useEffect(() => {
     if (!ready || !isClient) {
+      console.log('⏸️ Foreground listener setup skipped:', { ready, isClient });
       return;
     }
 
-    console.log('🔹 Setting up foreground message listener...');
-    const unsubscribe = onForegroundMessage(showNotification);
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
+    const setupMessageListener = async () => {
+      try {
+        console.log('🔊 Setting up FCM foreground message listener...');
+        
+        // ✅ FIXED: Properly handle the Promise
+        const unsubscribeFunction = await onForegroundMessage((payload) => {
+          console.log('📨 FCM foreground message received:', payload);
+          console.log('📨 Notification data:', payload.notification);
+          console.log('📨 Custom data:', payload.data);
+          
+          // Only show notification if app is in foreground and visible
+          if (!document.hidden && isMounted) {
+            showNotification(payload);
+          } else {
+            console.log('📱 App is hidden, skipping foreground notification');
+          }
+        });
+
+        if (unsubscribeFunction && isMounted) {
+          unsubscribe = unsubscribeFunction;
+          console.log('✅ FCM foreground listener setup complete');
+        }
+      } catch (err) {
+        console.error('❌ Error setting up FCM foreground listener:', err);
+      }
+    };
+
+    setupMessageListener();
 
     return () => {
-      console.log('🔹 Cleaning up foreground message listener');
+      isMounted = false;
       if (unsubscribe) {
+        console.log('🔄 Cleaning up FCM foreground listener');
         unsubscribe();
       }
     };
   }, [ready, isClient, showNotification]);
 
-  // Refresh token on visibility change
+  // Token refresh on visibility change
   useEffect(() => {
-    if (!ready || !isClient) {
+    if (!ready || !isClient || !currentUserId) {
       return;
     }
 
     const handleVisibilityChange = async () => {
-      if (!document.hidden && currentUserId) {
+      if (!document.hidden) {
         try {
+          // Refresh token when app becomes visible
+          console.log('👁️ App became visible, checking token...');
           const newToken = await getFcmToken();
           if (newToken && newToken !== token) {
-            console.log('🔄 Token refreshed');
+            console.log('🔄 Refreshing FCM token');
             setToken(newToken);
             await registerToken(newToken);
           }
@@ -301,16 +336,34 @@ const [userIdLoaded, setUserIdLoaded] = useState(false);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [ready, isClient, currentUserId, token, registerToken]);
+
+  // Reset when user changes
+  useEffect(() => {
+    console.log('👤 User changed, resetting FCM state');
+    setReady(false);
+    setToken(null);
+    setError(null);
+    initializationRef.current = false;
+    tokenRegistrationRef.current = false;
+  }, [currentUserId]);
 
   return { 
     ready, 
     token, 
     error, 
     supported,
-    registerToken // Exposing for manual registration if needed
+    registerToken,
+    isInitialized: initializationRef.current,
+    // Debug info
+    debugInfo: {
+      isClient,
+      hasUser: !!currentUserId,
+      notificationPermission: typeof window !== 'undefined' ? Notification.permission : 'unknown'
+    }
   };
-}; 
+};

@@ -1,6 +1,6 @@
-// lib/firebaseClient.ts - SIMPLIFIED WITH TYPES
+// lib/firebaseClient.ts
 import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getMessaging, Messaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, Messaging, getToken, onMessage,isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,41 +12,94 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app: FirebaseApp = initializeApp(firebaseConfig);
+export const app: FirebaseApp = initializeApp(firebaseConfig); // 👈 export kar diya
 let messaging: Messaging | null = null;
 
-try {
-  messaging = getMessaging(app);
-} catch (error) {
-  console.warn('Firebase messaging initialization failed:', error);
-}
 
-export const isFcmSupported = (): boolean => {
+
+// ✅ check karo supported hai ya nahi
+export const getMessagingInstance = async (): Promise<Messaging | null> => {
+  if (typeof window === 'undefined') return null;
+  
+  if (!messaging) {
+    try {
+      const supported = await isSupported();
+      if (supported) {
+        messaging = getMessaging(app);
+        console.log("✅ Messaging initialized successfully");
+      } else {
+        console.warn("⚠️ FCM not supported in this browser");
+        return null;
+      }
+    } catch (error) {
+      console.error("❌ Error initializing messaging:", error);
+      return null;
+    }
+  }
+  
+  return messaging;
+};
+
+export const isFcmSupported = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return false;
   if (!('Notification' in window)) return false;
   
-  console.log('FCM basic support check passed');
-  return true;
+  try {
+    const supported = await isSupported();
+    console.log('✅ FCM support check:', supported);
+    return supported;
+  } catch (error) {
+    console.error('❌ Error checking FCM support:', error);
+    return false;
+  }
 };
 
 export const getFcmToken = async (): Promise<string | null> => {
-  if (!messaging) {
-    console.log('Messaging not available');
-    return null;
-  }
-  
   try {
-    const token = await getToken(messaging, {
+    const messagingInstance = await getMessagingInstance();
+    if (!messagingInstance) {
+      console.log('❌ Messaging not available');
+      return null;
+    }
+
+    // Request permission first
+    const permission = await Notification.requestPermission();
+    console.log('📋 Notification permission:', permission);
+    
+    if (permission !== 'granted') {
+      console.log('❌ Notification permission denied');
+      return null;
+    }
+    
+    const token = await getToken(messagingInstance, {
       vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
     });
+    
+    console.log("🎯 FCM Token obtained:", token);
     return token;
   } catch (error) {
-    console.error('Error getting FCM token:', error);
+    console.error('❌ Error getting FCM token:', error);
     return null;
   }
 };
 
-export const onForegroundMessage = (callback: (payload: any) => void): (() => void) => {
-  if (!messaging) return () => {};
-  return onMessage(messaging, callback);
+export const onForegroundMessage = async (callback: (payload: any) => void): Promise<(() => void) | null> => {
+  try {
+    const messagingInstance = await getMessagingInstance();
+    if (!messagingInstance) {
+      console.log('❌ Cannot setup foreground listener - messaging not available');
+      return null;
+    }
+    
+    console.log('🔊 Setting up foreground message listener');
+    const unsubscribe = onMessage(messagingInstance, (payload) => {
+      console.log('📨 Foreground message received:', payload);
+      callback(payload);
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('❌ Error setting up foreground listener:', error);
+    return null;
+  }
 };
