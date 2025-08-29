@@ -1,4 +1,4 @@
-// public/firebase-messaging-sw.js - FIXED VERSION
+// public/firebase-messaging-sw.js
 importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-messaging-compat.js');
 
@@ -15,35 +15,26 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// Background message handler with deduplication
+// Background message handler
 messaging.onBackgroundMessage((payload) => {
   console.log('📨 Background message received:', payload);
   
-  // Deduplication - check if same notification was recently shown
-  const messageId = payload.messageId || `${payload.data?.chatId}-${Date.now()}`;
-  const lastNotificationKey = `lastNotif_${messageId}`;
-  const lastNotificationTime = localStorage.getItem(lastNotificationKey);
-  const currentTime = Date.now();
-
-  if (lastNotificationTime && currentTime - parseInt(lastNotificationTime) < 3000) {
-    console.log('🚫 Duplicate background notification ignored');
-    return;
-  }
-
-  localStorage.setItem(lastNotificationKey, currentTime.toString());
-
   const notificationTitle = payload.notification?.title || 'New Message';
   const notificationOptions = {
     body: payload.notification?.body || 'You have a new message',
     icon: '/icon-192x192.png',
     badge: '/badge-72x72.png',
     data: payload.data || {},
-    tag: messageId, // Deduplication tag
-    requireInteraction: false,
+    tag: `bg-${Date.now()}`,
+    requireInteraction: true,
     actions: [
       {
         action: 'open',
         title: 'Open App'
+      },
+      {
+        action: 'dismiss',
+        title: 'Dismiss'
       }
     ]
   };
@@ -58,7 +49,7 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
 
-  if (event.action === 'open' || !event.action) {
+  if (event.action === 'open') {
     const urlToOpen = new URL('/', self.location.origin).href;
     
     event.waitUntil(
@@ -74,5 +65,12 @@ self.addEventListener('notificationclick', (event) => {
         }
       })
     );
+  }
+});
+
+// Listen for messages from main thread
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
