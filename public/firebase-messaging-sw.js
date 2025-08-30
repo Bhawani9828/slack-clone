@@ -75,7 +75,7 @@ self.addEventListener('notificationclick', (event) => {
   if (event.action === 'open' || event.action === undefined) {
     const chatId = event.notification.data?.chatId;
     const urlToOpen = chatId ? 
-      new URL(`/chat/${chatId}`, self.location.origin).href :
+      new URL(`/`, self.location.origin).href :
       new URL('/', self.location.origin).href;
     
     event.waitUntil(
