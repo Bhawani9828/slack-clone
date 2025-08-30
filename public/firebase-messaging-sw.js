@@ -28,14 +28,14 @@ setInterval(() => {
 messaging.onBackgroundMessage((payload) => {
   console.log('📨 SW: Background message received:', payload);
   
-  // 🔥 PREVENT DUPLICATE NOTIFICATIONS
+  
   const notifId = payload.data?.notificationId || 
                   payload.data?.messageId || 
                   `${payload.data?.senderId}_${Date.now()}`;
   
   if (recentNotifications.has(notifId)) {
     console.log('🚫 SW: Duplicate notification prevented:', notifId);
-    return; // Don't show notification
+    return; 
   }
   
   recentNotifications.add(notifId);
@@ -44,12 +44,12 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'New Message';
   const notificationOptions = {
     body: payload.notification?.body || 'You have a new message',
-    icon: '/icon-192x192.png',
-    badge: '/badge-72x72.png',
+    icon: '/01.png',
+    badge: '/01.png',
     data: payload.data || {},
-    tag: notifId, // 🔥 Use unique tag to prevent duplicates
+    tag: notifId, 
     requireInteraction: true,
-    renotify: false, // 🔥 Don't renotify for same tag
+    renotify: false, 
     actions: [
       {
         action: 'open',

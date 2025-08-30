@@ -130,6 +130,7 @@ export interface ChatUser {
   status?: string;
   email?: string;
   lastSeen?: string;
+  
 }
 
 export interface ChatGroup {

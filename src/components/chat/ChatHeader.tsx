@@ -20,6 +20,7 @@ import {
   ArrowBack,
 } from "@mui/icons-material";
 import UserAvatar from "./UserAvatar";
+import { formatLastSeen } from "@/lib/utils"; // Your existing utility function
 
 interface Contact {
   userId: string;
@@ -29,6 +30,7 @@ interface Contact {
   profilePicture?: string;
   profilePicturePublicId?: string;
   status?: string;
+  lastSeen?: string; // Add lastSeen field
 }
 
 interface ChatHeaderProps {
@@ -42,6 +44,7 @@ interface ChatHeaderProps {
     isOnline?: boolean;
     isTyping?: boolean;
     userId?: string;
+    lastSeen?: string; // Add lastSeen to contact
   };
   currentUserId: string;
   onVideoCall?: (userId: string, name?: string, avatarUrl?: string) => void;
@@ -59,6 +62,13 @@ interface ChatHeaderProps {
   onEditGroup?: () => void;
   onAddParticipants?: () => void;
   onShowGroupMedia?: () => void;
+
+  // Socket service for real-time status updates
+  socketService?: {
+    requestUserStatus: (userId: string) => void;
+    on: (event: string, callback: Function) => void;
+    off: (event: string, callback?: Function) => void;
+  };
 }
 
 export default function ChatHeader({
@@ -77,10 +87,87 @@ export default function ChatHeader({
   onAddParticipants,
   onShowGroupMedia,
   isMobile = false,
-  onMobileBack
+  onMobileBack,
+  socketService
 }: ChatHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  
+  // Local state for real-time status updates
+  const [userStatus, setUserStatus] = useState({
+    isOnline: contact.isOnline || false,
+    lastSeen: contact.lastSeen || undefined,
+  });
+
+  // Update local status when contact prop changes
+  useEffect(() => {
+    setUserStatus({
+      isOnline: contact.isOnline || false,
+      lastSeen: contact.lastSeen,
+    });
+  }, [contact.isOnline, contact.lastSeen]);
+
+  // Request and listen for real-time status updates
+  useEffect(() => {
+    if (!socketService || !contact.userId || isGroupChat) return;
+
+    // Request current status
+    socketService.requestUserStatus(contact.userId);
+
+    // Listen for status updates
+    const handleUserOnline = (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
+      if (data.userId === contact.userId) {
+        console.log(`User ${contact.userId} came online`);
+        setUserStatus({
+          isOnline: true,
+          lastSeen: data.lastSeen,
+        });
+      }
+    };
+
+    const handleUserOffline = (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
+      if (data.userId === contact.userId) {
+        console.log(`User ${contact.userId} went offline, last seen: ${data.lastSeen}`);
+        setUserStatus({
+          isOnline: false,
+          lastSeen: data.lastSeen,
+        });
+      }
+    };
+
+    const handleUserStatus = (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
+      if (data.userId === contact.userId) {
+        console.log(`Status update for ${contact.userId}:`, data);
+        setUserStatus({
+          isOnline: data.isOnline,
+          lastSeen: data.lastSeen,
+        });
+      }
+    };
+
+    // Register listeners
+    socketService.on('userOnline', handleUserOnline);
+    socketService.on('userOffline', handleUserOffline);
+    socketService.on('userStatus', handleUserStatus);
+
+    // Cleanup listeners on unmount
+    return () => {
+      socketService.off('userOnline', handleUserOnline);
+      socketService.off('userOffline', handleUserOffline);
+      socketService.off('userStatus', handleUserStatus);
+    };
+  }, [contact.userId, socketService, isGroupChat]);
+
+  // Poll for status updates every 30 seconds
+  useEffect(() => {
+    if (!socketService || !contact.userId || isGroupChat) return;
+
+    const interval = setInterval(() => {
+      socketService.requestUserStatus(contact.userId!);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [contact.userId, socketService, isGroupChat]);
 
   const handleVideoCall = async () => {
     onVideoCall?.(contact.userId || '', contact.name, contact.profilePicture || contact.avatar);
@@ -136,6 +223,26 @@ export default function ChatHeader({
     handleMenuClose();
   };
 
+  // Generate status text based on current state
+  const getStatusText = () => {
+    if (isTyping) {
+      return "typing...";
+    }
+    
+    if (isGroupChat) {
+      return `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}`;
+    }
+    
+    // Use real-time status for individual chats
+    const { time, isOnline } = formatLastSeen(userStatus.lastSeen, userStatus.isOnline);
+    
+    if (isOnline) {
+      return "Online";
+    } else {
+      return time; // This will show "last seen today at 10:30 AM" etc.
+    }
+  };
+
   return (
     <div className={`chat-header px-3 py-2 flex items-center justify-between ${
       isMobile ? 'min-h-16 h-16' : 'h-28'
@@ -159,8 +266,9 @@ export default function ChatHeader({
               userId={contact.userId}
               name={contact.name}
               imageUrl={contact.profilePicture || contact.avatar}
-             size={isMobile ? 'small' : 'medium'}
+              size={isMobile ? 'small' : 'medium'}
               showOnlineStatus={true}
+              isOnline={userStatus.isOnline} 
             />
           </div>
         )}
@@ -171,12 +279,12 @@ export default function ChatHeader({
           }`}>
             {contact.name}
           </h3>
-          <p className={`text-[#4b8d81] truncate ${
+          <p className={`truncate ${
             isMobile ? 'text-xs' : 'text-sm'
+          } ${
+            userStatus.isOnline || isTyping ? 'text-[#4b8d81]' : 'text-gray-500'
           }`}>
-            {isTyping ? "typing..." : 
-              isGroupChat ? `${participantCount} participants${onlineCount > 0 ? `, ${onlineCount} online` : ''}` :
-              contact.status || "Online"}
+            {getStatusText()}
           </p>
         </div>
       </div>

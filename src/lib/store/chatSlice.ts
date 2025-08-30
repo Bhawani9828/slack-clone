@@ -154,7 +154,7 @@ export const optimizedChatSlice = createSlice({
 
     updateMessageStatus: (state, action: PayloadAction<{
       messageId: string;
-      status: 'delivered' | 'read' | "error";
+      status: 'delivered' | 'read' | "error" | 'deleted';
     }>) => {
       const { messageId, status } = action.payload;
       const message = state.messages.find(msg => msg._id === messageId);

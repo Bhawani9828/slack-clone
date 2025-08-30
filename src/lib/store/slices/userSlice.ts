@@ -147,7 +147,7 @@ const userSlice = createSlice({
   name: 'user',
   initialState,
   reducers: {
-    updateUserOnlineStatus: (state, action: PayloadAction<{ userId: string; isOnline: boolean }>) => {
+    updateUserOnlineStatus: (state, action: PayloadAction<{ userId: string; isOnline: boolean; lastSeen?: string  }>) => {
       if (state.currentUser && state.currentUser._id === action.payload.userId) {
         state.currentUser.isOnline = action.payload.isOnline;
       }
@@ -161,6 +161,7 @@ updateChatUserLastMessage: (state, action: PayloadAction<{
   markRead?: boolean;
   timestamp?: string | number;
   senderId?: string; // Add senderId parameter
+  
 }>) => {
   const { chatId, lastMessage, time, markRead, senderId } = action.payload;
   const index = state.chatusers.findIndex(chat => chat.id === chatId);
@@ -202,7 +203,7 @@ updateChatUserLastMessage: (state, action: PayloadAction<{
         state.chatusers[index].isTyping = action.payload.isTyping;
       }
     },
-    updateChatUserOnlineStatus: (state, action: PayloadAction<{ userId: string; isOnline: boolean }>) => {
+    updateChatUserOnlineStatus: (state, action: PayloadAction<{ userId: string; isOnline: boolean; lastSeen?: string }>) => {
       const index = state.chatusers.findIndex(chat => chat.id === action.payload.userId);
       if (index >= 0) {
         state.chatusers[index].isOnline = action.payload.isOnline;

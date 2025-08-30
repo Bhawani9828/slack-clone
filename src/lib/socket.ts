@@ -1,11 +1,21 @@
-// socket.service.ts - Enhanced Version with Chat Gateway Integration
+// socket.service.ts - Enhanced Version with Status Methods
 import { io, Socket } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { ReplyMessagePayload } from '@/types/chatTypes';
 
+import { updateUserOnlineStatus, updateChatUserOnlineStatus } from '@/lib/store/slices/userSlice';
+import { store } from './store';
+
 export interface DeleteOptions {
   isGroupChat?: boolean;
   groupId?: string;
+}
+
+interface UserStatusData {
+  userId: string;
+  isOnline: boolean;
+  lastSeen?: string;
+  type?: 'connect' | 'disconnect' | 'heartbeat';
 }
 
 export interface ChatGatewayEvents {
@@ -66,6 +76,7 @@ class SocketService {
   private eventListeners: Map<string, Function[]> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private lastHeartbeat: number = Date.now();
+   private statusUpdateListeners: Map<string, (status: UserStatusData) => void> = new Map();
 
   setCurrentUserId(userId: string) {
     this.currentUserId = userId;
@@ -94,8 +105,78 @@ class SocketService {
     // Setup new listeners with gateway events
     this.socket.on('receiveMessage', callbacks.onMessage);
     this.socket.on('typing', callbacks.onTyping);
-    this.socket.on('userOnline', (userId) => callbacks.onUserStatus({ userId, isOnline: true }));
-    this.socket.on('userOffline', (userId) => callbacks.onUserStatus({ userId, isOnline: false }));
+    
+    // Enhanced user status listeners
+    this.socket.on('userOnline', (data: { userId: string; lastSeen?: string; isOnline: boolean }) => {
+      console.log(`🟢 User ${data.userId} is online`);
+      
+      store.dispatch(updateUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: true,
+        lastSeen: data.lastSeen 
+      }));
+      store.dispatch(updateChatUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: true,
+        lastSeen: data.lastSeen 
+      }));
+      
+      // Trigger user status callback
+      callbacks.onUserStatus({
+        userId: data.userId,
+        isOnline: true,
+        lastSeen: data.lastSeen,
+        type: 'online'
+      });
+    });
+
+    this.socket.on('userOffline', (data: { userId: string; lastSeen?: string; isOnline: boolean }) => {
+      console.log(`⚪ User ${data.userId} is offline, last seen: ${data.lastSeen}`);
+      
+      store.dispatch(updateUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: false,
+        lastSeen: data.lastSeen 
+      }));
+      store.dispatch(updateChatUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: false,
+        lastSeen: data.lastSeen 
+      }));
+      
+      // Trigger user status callback
+      callbacks.onUserStatus({
+        userId: data.userId,
+        isOnline: false,
+        lastSeen: data.lastSeen,
+        type: 'offline'
+      });
+    });
+
+    // User status response listener
+    this.socket.on('userStatus', (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
+      console.log(`📊 User status response:`, data);
+      
+      store.dispatch(updateUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: data.isOnline,
+        lastSeen: data.lastSeen 
+      }));
+      store.dispatch(updateChatUserOnlineStatus({ 
+        userId: data.userId, 
+        isOnline: data.isOnline,
+        lastSeen: data.lastSeen 
+      }));
+      
+      // Trigger user status callback
+      callbacks.onUserStatus({
+        userId: data.userId,
+        isOnline: data.isOnline,
+        lastSeen: data.lastSeen,
+        type: 'status_response'
+      });
+    });
+
     this.socket.on('lastMessage', callbacks.onLastMessage);
     
     // Message action listeners
@@ -137,6 +218,23 @@ class SocketService {
 
     this.socket.on('onlineUsers', (users: string[]) => {
       console.log('👥 Online users received:', users.length);
+      
+      // Update status for all received users
+      users.forEach(userId => {
+        store.dispatch(updateUserOnlineStatus({ 
+          userId, 
+          isOnline: true 
+        }));
+        store.dispatch(updateChatUserOnlineStatus({ 
+          userId, 
+          isOnline: true 
+        }));
+      });
+    });
+
+    // Error listeners
+    this.socket.on('userStatusError', (error: any) => {
+      console.error('❌ User status error:', error);
     });
 
     console.log('📡 Chat gateway listeners setup complete');
@@ -327,15 +425,15 @@ class SocketService {
       // Leave any previous room to avoid duplicate messages
       if (this.currentChatId && this.currentChatId !== chatId) {
         this.socket.emit('leaveChat', { chatId: this.currentChatId });
-        console.log(`🚪 Left chat: ${this.currentChatId}`);
+        console.log(`Left chat: ${this.currentChatId}`);
       }
 
       // Join new chat
       this.currentChatId = chatId;
       this.socket.emit('joinChat', { chatId });
-      console.log(`🔗 Joined chat: ${chatId}`);
+      console.log(`Joined chat: ${chatId}`);
     } else {
-      console.warn('❌ Cannot join channel: socket not connected');
+      console.warn('Cannot join channel: socket not connected');
     }
   }
 
@@ -343,7 +441,7 @@ class SocketService {
     const targetChatId = chatId || this.currentChatId;
     if (this.socket?.connected && targetChatId) {
       this.socket.emit('leaveChat', { chatId: targetChatId });
-      console.log(`🚪 Left chat: ${targetChatId}`);
+      console.log(`Left chat: ${targetChatId}`);
       
       if (targetChatId === this.currentChatId) {
         this.currentChatId = null;
@@ -354,12 +452,12 @@ class SocketService {
   async sendMessage(message: any): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
-        console.error('❌ Socket not connected when trying to send message');
+        console.error('Socket not connected when trying to send message');
         reject(new Error('Socket not connected'));
         return;
       }
 
-      console.log('📤 Sending message via gateway:', message);
+      console.log('Sending message via gateway:', message);
       
       // Add timestamp and client ID for deduplication
       const payload = {
@@ -370,9 +468,9 @@ class SocketService {
 
       // Use sendMessage event (gateway expects this)
       this.socket.emit('sendMessage', payload, (response: any) => {
-        console.log('📤 Send message response:', response);
+        console.log('Send message response:', response);
         if (response?.error) {
-          console.error('❌ Send message error:', response.error);
+          console.error('Send message error:', response.error);
           reject(new Error(response.error));
         } else {
           resolve();
@@ -386,7 +484,7 @@ class SocketService {
 
   sendTypingIndicator(receiverId: string, isTyping: boolean) {
     if (this.socket && this.socket.connected) {
-      console.log(`💬 Sending typing indicator: receiverId=${receiverId}, isTyping=${isTyping}`);
+      console.log(`Sending typing indicator: receiverId=${receiverId}, isTyping=${isTyping}`);
       this.socket.emit('typing', {
         receiverId,
         isTyping,
@@ -400,13 +498,13 @@ class SocketService {
         timestamp: Date.now(),
       });
     } else {
-      console.warn('❌ Cannot send typing indicator: socket not connected');
+      console.warn('Cannot send typing indicator: socket not connected');
     }
   }
 
   markAsRead(messageId: string, senderId: string) {
     if (this.socket && this.socket.connected) {
-      console.log(`👁️ Marking as read: messageId=${messageId}, senderId=${senderId}`);
+      console.log(`Marking as read: messageId=${messageId}, senderId=${senderId}`);
       this.socket.emit('markAsRead', {
         messageId,
         senderId,
@@ -420,8 +518,26 @@ class SocketService {
         readAt: Date.now(),
       });
     } else {
-      console.warn('❌ Cannot mark as read: socket not connected');
+      console.warn('Cannot mark as read: socket not connected');
     }
+  }
+
+  // NEW METHOD: Request specific user status
+  requestUserStatus(userId: string) {
+    if (this.socket && this.socket.connected) {
+      console.log(`Requesting status for user: ${userId}`);
+      this.socket.emit('getUserStatus', { userId });
+    } else {
+      console.warn('Cannot request user status: socket not connected');
+    }
+  }
+
+  // NEW METHOD: Get current user's online status
+  getCurrentUserStatus(): { isOnline: boolean; userId: string | null } {
+    return {
+      isOnline: this.socket?.connected || false,
+      userId: this.currentUserId,
+    };
   }
 
   // Enhanced Message Action Methods
@@ -451,6 +567,92 @@ class SocketService {
       setTimeout(() => {
         this.socket?.off("messageDeleted", onDeleted);
         reject(new Error("Delete timeout"));
+      }, 10000);
+    });
+  }
+
+  // Forward message
+  forwardMessage(messageId: string, receiverIds: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        return reject(new Error("Socket not connected"));
+      }
+
+      const onForwarded = (data: any) => {
+        if (data?.originalMessageId === messageId) {
+          this.socket?.off("messageForwarded", onForwarded);
+          resolve();
+        }
+      };
+
+      this.socket.on("messageForwarded", onForwarded);
+
+      this.socket.emit("forwardMessage", {
+        messageId,
+        receiverIds,
+        timestamp: Date.now(),
+      });
+
+      setTimeout(() => {
+        this.socket?.off("messageForwarded", onForwarded);
+        reject(new Error("Forward timeout"));
+      }, 10000);
+    });
+  }
+
+  // Reply to message
+  replyMessage(payload: ReplyMessagePayload): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        return reject(new Error("Socket not connected"));
+      }
+
+      const onDelivered = (data: any) => {
+        if (data?.replyTo === payload.originalMessageId) {
+          this.socket?.off("messageDelivered", onDelivered);
+          resolve();
+        }
+      };
+
+      this.socket.on("messageDelivered", onDelivered);
+
+      this.socket.emit("replyMessage", {
+        ...payload,
+        timestamp: Date.now(),
+      });
+
+      setTimeout(() => {
+        this.socket?.off("messageDelivered", onDelivered);
+        reject(new Error("Reply timeout"));
+      }, 10000);
+    });
+  }
+
+  // Toggle favorite
+  toggleFavorite(messageId: string, isFavorite: boolean): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        return reject(new Error("Socket not connected"));
+      }
+
+      const onToggled = (data: any) => {
+        if (data?.messageId === messageId) {
+          this.socket?.off("favoriteToggled", onToggled);
+          resolve();
+        }
+      };
+
+      this.socket.on("favoriteToggled", onToggled);
+
+      this.socket.emit("toggleFavorite", {
+        messageId,
+        isFavorite,
+        timestamp: Date.now(),
+      });
+
+      setTimeout(() => {
+        this.socket?.off("favoriteToggled", onToggled);
+        reject(new Error("Toggle favorite timeout"));
       }, 10000);
     });
   }
@@ -488,44 +690,44 @@ class SocketService {
   public requestOnlineUsers() {
     if (!this.socket || !this.currentUserId) return;
 
-    console.log('📡 Requesting online users from server...');
+    console.log('Requesting online users from server...');
     this.socket.emit('getOnlineUsers', { userId: this.currentUserId });
   }
 
   // Call-related methods
   callUser(data: { to: string; from: string; offer: any; type: 'video' | 'audio'; fromName?: string; callId?: string }) {
     if (this.socket && this.socket.connected) {
-      console.log('📞 Initiating call:', data);
+      console.log('Initiating call:', data);
       this.socket.emit('call-user', data);
     } else {
-      console.warn('❌ Cannot initiate call: socket not connected');
+      console.warn('Cannot initiate call: socket not connected');
     }
   }
 
   acceptCall(data: { to: string; from: string; answer: any; callId?: string }) {
     if (this.socket && this.socket.connected) {
-      console.log('✅ Accepting call:', data);
+      console.log('Accepting call:', data);
       this.socket.emit('call-accepted', data);
     } else {
-      console.warn('❌ Cannot accept call: socket not connected');
+      console.warn('Cannot accept call: socket not connected');
     }
   }
 
   rejectCall(data: { to: string; from: string; callId?: string }) {
     if (this.socket && this.socket.connected) {
-      console.log('❌ Rejecting call:', data);
+      console.log('Rejecting call:', data);
       this.socket.emit('call-rejected', data);
     } else {
-      console.warn('❌ Cannot reject call: socket not connected');
+      console.warn('Cannot reject call: socket not connected');
     }
   }
 
   endCall(data: { to: string; from: string; callId?: string }) {
     if (this.socket && this.socket.connected) {
-      console.log('📞 Ending call:', data);
+      console.log('Ending call:', data);
       this.socket.emit('end-call', data);
     } else {
-      console.warn('❌ Cannot end call: socket not connected');
+      console.warn('Cannot end call: socket not connected');
     }
   }
 
@@ -535,7 +737,7 @@ class SocketService {
     
     this.socket.off('incoming-call');
     this.socket.on('incoming-call', (data) => {
-      console.log('📞 Incoming call event:', data);
+      console.log('Incoming call event:', data);
       callback(data);
     });
   }
@@ -545,7 +747,7 @@ class SocketService {
     
     this.socket.off('call-accepted');
     this.socket.on('call-accepted', (data) => {
-      console.log('✅ Call accepted event:', data);
+      console.log('Call accepted event:', data);
       callback(data);
     });
   }
@@ -555,7 +757,7 @@ class SocketService {
     
     this.socket.off('call-rejected');
     this.socket.on('call-rejected', (data) => {
-      console.log('❌ Call rejected event:', data);
+      console.log('Call rejected event:', data);
       callback(data);
     });
   }
@@ -565,7 +767,7 @@ class SocketService {
     
     this.socket.off('call-ended');
     this.socket.on('call-ended', (data) => {
-      console.log('📞 Call ended event:', data);
+      console.log('Call ended event:', data);
       callback(data);
     });
   }

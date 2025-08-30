@@ -1,3 +1,4 @@
+// lib/store/index.ts - Fixed Store Configuration
 import { configureStore } from '@reduxjs/toolkit';
 import chatReducer from './chatSlice';
 import userReducer from './slices/userSlice'; // Corrected import
@@ -25,6 +26,9 @@ export type AppStore = ReturnType<typeof makeStore>;
 // Infer the RootState and AppDispatch types
 export type RootState = ReturnType<AppStore['getState']>;
 export type AppDispatch = AppStore['dispatch'];
+
+// FIX: Create and export the store instance
+export const store = makeStore();
 
 // Export typed hooks
 export const useAppDispatch: () => AppDispatch = useDispatch;
