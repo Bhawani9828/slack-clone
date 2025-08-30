@@ -1,4 +1,4 @@
-// hooks/useFcm.ts - COMPLETE FIXED VERSION
+// hooks/useFcm.ts - FIXED VERSION with duplicate prevention
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFcmToken, onForegroundMessage, isFcmSupported } from '@/lib/firebaseClient';
 import { toast } from 'react-hot-toast';
@@ -12,6 +12,8 @@ interface FCMData {
   callType?: string;
   title?: string;
   body?: string;
+  messageId?: string;
+  notificationId?: string;
 }
 
 interface FCMPayload {
@@ -32,11 +34,22 @@ export const useFcm = (currentUserId?: string) => {
   const [supported, setSupported] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const messageListenerRef = useRef<(() => void) | null>(null);
+  
+  // 🔥 ADD: Track shown notifications to prevent duplicates
+  const shownNotifications = useRef(new Set<string>());
 
   // Check if we're on the client side
   useEffect(() => {
     setIsClient(true);
-    console.log('🏠 Client detected');
+    console.log('Client detected');
+    
+    // Clean up notification cache every 2 minutes
+    const cleanup = setInterval(() => {
+      shownNotifications.current.clear();
+      console.log('Cleaned up frontend notification cache');
+    }, 2 * 60 * 1000);
+    
+    return () => clearInterval(cleanup);
   }, []);
 
   // Check FCM support
@@ -47,9 +60,9 @@ export const useFcm = (currentUserId?: string) => {
       try {
         const isFcmSupportedResult = await isFcmSupported();
         setSupported(isFcmSupportedResult);
-        console.log('🔍 FCM Support:', isFcmSupportedResult);
+        console.log('FCM Support:', isFcmSupportedResult);
       } catch (err) {
-        console.error('❌ Error checking FCM support:', err);
+        console.error('Error checking FCM support:', err);
         setSupported(false);
       }
     };
@@ -60,7 +73,7 @@ export const useFcm = (currentUserId?: string) => {
   // Register token with backend
   const registerToken = useCallback(async (fcmToken: string): Promise<boolean> => {
     if (!isClient || !currentUserId || !fcmToken) {
-      console.log('❌ Missing parameters for token registration');
+      console.log('Missing parameters for token registration');
       return false;
     }
 
@@ -70,16 +83,16 @@ export const useFcm = (currentUserId?: string) => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
       if (!apiUrl) {
-        console.error('❌ API URL not configured');
+        console.error('API URL not configured');
         return false;
       }
 
       if (!authToken) {
-        console.error('❌ No authentication token found');
+        console.error('No authentication token found');
         return false;
       }
 
-      console.log('📤 Registering FCM token with backend...');
+      console.log('Registering FCM token with backend...');
 
       const response = await fetch(`${apiUrl}/auth/fcm-token`, {
         method: 'POST',
@@ -96,24 +109,38 @@ export const useFcm = (currentUserId?: string) => {
 
       if (response.ok) {
         const responseData = await response.json();
-        console.log('✅ FCM token registered successfully:', responseData);
+        console.log('FCM token registered successfully:', responseData);
         return true;
       } else {
         const errorText = await response.text();
-        console.error('❌ Failed to register FCM token:', response.status, errorText);
+        console.error('Failed to register FCM token:', response.status, errorText);
         return false;
       }
     } catch (err) {
-      console.error('❌ Error registering FCM token:', err);
+      console.error('Error registering FCM token:', err);
       return false;
     }
   }, [isClient, currentUserId]);
 
-  // Show notification
+  // Show notification with duplicate prevention
   const showNotification = useCallback((payload: FCMPayload) => {
     if (!isClient) return;
 
-    console.log('🎯 Processing notification:', payload);
+    console.log('Processing notification:', payload);
+
+    // 🔥 PREVENT DUPLICATE FRONTEND NOTIFICATIONS
+    const notifId = payload.data?.notificationId || 
+                   payload.data?.messageId || 
+                   payload.messageId ||
+                   `${payload.data?.senderId}_${Date.now()}`;
+    
+    if (shownNotifications.current.has(notifId)) {
+      console.log('Duplicate frontend notification prevented:', notifId);
+      return;
+    }
+    
+    shownNotifications.current.add(notifId);
+    console.log('Showing notification:', notifId);
 
     const notification = payload.notification;
     const data = payload.data;
@@ -122,7 +149,7 @@ export const useFcm = (currentUserId?: string) => {
     const body = notification?.body || data?.body || 'You have a new message';
     const type = data?.type || 'message';
 
-    console.log('🔔 Showing notification:', { title, body, type });
+    console.log('Showing notification:', { title, body, type });
 
     // Show toast notification
     toast.custom((t) => (
@@ -156,24 +183,25 @@ export const useFcm = (currentUserId?: string) => {
     ), {
       duration: type === 'call' ? 10000 : 5000,
       position: 'top-right',
+      id: notifId, // 🔥 Use unique ID for toast deduplication
     });
 
-    // Play notification sound
+    // Play notification sound (only once)
     try {
-      const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
+      const audio = new Audio('/notification.mp3'); // Use local audio file
       audio.volume = 0.3;
       audio.play().catch(() => {
-        console.log('🔇 Could not play notification sound');
+        console.log('Could not play notification sound');
       });
     } catch (err) {
-      console.log('🔇 Audio not available');
+      console.log('Audio not available');
     }
   }, [isClient]);
 
   // Initialize FCM
   useEffect(() => {
     if (!isClient || !currentUserId || !supported) {
-      console.log('⏸️ FCM initialization skipped:', { 
+      console.log('FCM initialization skipped:', { 
         isClient, hasUserId: !!currentUserId, supported 
       });
       return;
@@ -183,38 +211,38 @@ export const useFcm = (currentUserId?: string) => {
 
     const initializeFCM = async () => {
       try {
-        console.log('🚀 Starting FCM initialization...');
+        console.log('Starting FCM initialization...');
 
         // Get FCM token
-        console.log('🎯 Getting FCM token...');
+        console.log('Getting FCM token...');
         const fcmToken = await getFcmToken();
         
         if (!isMounted) return;
 
         if (!fcmToken) {
           setError('Failed to get FCM token');
-          console.log('❌ Failed to get FCM token');
+          console.log('Failed to get FCM token');
           return;
         }
 
-        console.log('✅ FCM Token obtained successfully');
+        console.log('FCM Token obtained successfully');
         setToken(fcmToken);
 
         // Register with backend
-        console.log('📤 Registering token with backend...');
+        console.log('Registering token with backend...');
         const registered = await registerToken(fcmToken);
         
         if (!isMounted) return;
 
         if (registered) {
           setReady(true);
-          console.log('✅ FCM fully initialized and ready');
+          console.log('FCM fully initialized and ready');
         } else {
           setError('Failed to register token with backend');
-          console.log('❌ Failed to register token with backend');
+          console.log('Failed to register token with backend');
         }
       } catch (err) {
-        console.error('❌ FCM initialization failed:', err);
+        console.error('FCM initialization failed:', err);
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'FCM initialization failed');
         }
@@ -231,7 +259,7 @@ export const useFcm = (currentUserId?: string) => {
   // Setup message listener
   useEffect(() => {
     if (!ready || !isClient) {
-      console.log('⏸️ Message listener setup skipped:', { ready, isClient });
+      console.log('Message listener setup skipped:', { ready, isClient });
       return;
     }
 
@@ -239,31 +267,31 @@ export const useFcm = (currentUserId?: string) => {
 
     const setupMessageListener = async () => {
       try {
-        console.log('🔊 Setting up FCM message listener...');
+        console.log('Setting up FCM message listener...');
         
         const unsubscribe = await onForegroundMessage((payload) => {
           if (!isMounted) return;
           
-          console.log('📨 FCM message received:', {
+          console.log('FCM message received:', {
             notification: payload.notification,
             data: payload.data,
             messageId: payload.messageId
           });
           
-          // Show notification only if app is visible
+          // 🔥 ONLY show notification if app is visible AND not already shown
           if (!document.hidden) {
             showNotification(payload);
           } else {
-            console.log('📱 App is hidden, notification will be shown by service worker');
+            console.log('App is hidden, service worker will handle notification');
           }
         });
 
         if (unsubscribe && isMounted) {
           messageListenerRef.current = unsubscribe;
-          console.log('✅ FCM message listener setup complete');
+          console.log('FCM message listener setup complete');
         }
       } catch (err) {
-        console.error('❌ Error setting up message listener:', err);
+        console.error('Error setting up message listener:', err);
       }
     };
 
@@ -272,7 +300,7 @@ export const useFcm = (currentUserId?: string) => {
     return () => {
       isMounted = false;
       if (messageListenerRef.current) {
-        console.log('🔄 Cleaning up message listener');
+        console.log('Cleaning up message listener');
         messageListenerRef.current();
         messageListenerRef.current = null;
       }

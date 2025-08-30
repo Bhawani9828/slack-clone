@@ -1,23 +1,45 @@
-// public/firebase-messaging-sw.js
+// public/firebase-messaging-sw.js - FIXED VERSION
 importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.6.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-  apiKey: "<?= process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?>",
-  authDomain: "<?= process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?>",
-  projectId: "<?= process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?>",
-  storageBucket: "<?= process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?>",
-  messagingSenderId: "<?= process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?>",
-  appId: "<?= process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?>"
+  apiKey: "AIzaSyBTqhwIelZ_YkwdUwZ3oJC9sXrUzQKNbNI",
+  authDomain: "slack-clone-black-nuvercel.firebaseapp.com",
+  projectId: "slack-clone-black-nuvercel",
+  storageBucket: "slack-clone-black-nuvercel.firebasestorage.app",
+  messagingSenderId: "1085299777134",
+  appId: "1:1085299777134:web:e9b2c0a9e8b1eabecaaa9a"
 };
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
+// 🔥 ADD: Track recent notifications to prevent duplicates
+let recentNotifications = new Set();
+
+// Clean up cache every 2 minutes
+setInterval(() => {
+  recentNotifications.clear();
+  console.log('🧹 SW: Cleaned notification cache');
+}, 2 * 60 * 1000);
+
 // Background message handler
 messaging.onBackgroundMessage((payload) => {
-  console.log('📨 Background message received:', payload);
+  console.log('📨 SW: Background message received:', payload);
+  
+  // 🔥 PREVENT DUPLICATE NOTIFICATIONS
+  const notifId = payload.data?.notificationId || 
+                  payload.data?.messageId || 
+                  `${payload.data?.senderId}_${Date.now()}`;
+  
+  if (recentNotifications.has(notifId)) {
+    console.log('🚫 SW: Duplicate notification prevented:', notifId);
+    return; // Don't show notification
+  }
+  
+  recentNotifications.add(notifId);
+  console.log('✅ SW: Showing notification:', notifId);
   
   const notificationTitle = payload.notification?.title || 'New Message';
   const notificationOptions = {
@@ -25,8 +47,9 @@ messaging.onBackgroundMessage((payload) => {
     icon: '/icon-192x192.png',
     badge: '/badge-72x72.png',
     data: payload.data || {},
-    tag: `bg-${Date.now()}`,
+    tag: notifId, // 🔥 Use unique tag to prevent duplicates
     requireInteraction: true,
+    renotify: false, // 🔥 Don't renotify for same tag
     actions: [
       {
         action: 'open',
@@ -45,21 +68,26 @@ messaging.onBackgroundMessage((payload) => {
 
 // Notification click handler
 self.addEventListener('notificationclick', (event) => {
-  console.log('🔔 Notification clicked:', event.notification);
+  console.log('🔔 SW: Notification clicked:', event.notification);
   
   event.notification.close();
 
-  if (event.action === 'open') {
-    const urlToOpen = new URL('/', self.location.origin).href;
+  if (event.action === 'open' || event.action === undefined) {
+    const chatId = event.notification.data?.chatId;
+    const urlToOpen = chatId ? 
+      new URL(`/chat/${chatId}`, self.location.origin).href :
+      new URL('/', self.location.origin).href;
     
     event.waitUntil(
       clients.matchAll({type: 'window'}).then((windowClients) => {
+        // Check if app is already open
         for (const client of windowClients) {
-          if (client.url === urlToOpen && 'focus' in client) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
             return client.focus();
           }
         }
         
+        // Open new window if app not open
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }
