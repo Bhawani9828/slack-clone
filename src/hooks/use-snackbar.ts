@@ -1,21 +1,15 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useCallback } from "react"
 
 type SnackbarSeverity = "success" | "error" | "info" | "warning"
 
-export interface SnackbarOptions {
-  title?: string
-  message: string
-  severity?: SnackbarSeverity
-  duration?: number
-}
-
-export interface SnackbarState {
+interface SnackbarState {
   open: boolean
   message: string
   severity: SnackbarSeverity
-  duration: number
 }
 
 export function useSnackbar() {
@@ -23,26 +17,22 @@ export function useSnackbar() {
     open: false,
     message: "",
     severity: "info",
-    duration: 5000,
   })
 
-  const showSnackbar = useCallback((options: SnackbarOptions) => {
-    const { title, message, severity = "info", duration = 5000 } = options
+  const showSnackbar = useCallback((message: string, severity: SnackbarSeverity = "info") => {
     setSnackbarState({
       open: true,
-      message: title ? `${title}: ${message}` : message,
+      message,
       severity,
-      duration,
     })
   }, [])
 
-  const handleClose = useCallback(
-    (event?: React.SyntheticEvent | Event, reason?: string) => {
-      if (reason === "clickaway") return
-      setSnackbarState((prev) => ({ ...prev, open: false }))
-    },
-    []
-  )
+  const handleClose = useCallback((event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === "clickaway") {
+      return
+    }
+    setSnackbarState((prev) => ({ ...prev, open: false }))
+  }, [])
 
   return {
     snackbarState,
