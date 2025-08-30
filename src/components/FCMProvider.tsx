@@ -47,7 +47,7 @@ export const FCMProvider = ({ children }: FCMProviderProps) => {
 
         if (chatId) {
           console.log('Navigating to chat:', chatId);
-          router.push(`/chat/${chatId}`);
+          router.push(`/`);
         } else if (url) {
           console.log('Navigating to URL:', url);
           window.location.href = url;
