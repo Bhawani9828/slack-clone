@@ -361,7 +361,8 @@ export default function ChatArea({
             type: msg.type || 'text',
             channelId,
             replyToContent: replyingTo.content,
-            replyToSender: getSenderId(replyingTo.senderId)
+            replyToSender: getSenderId(replyingTo.senderId),
+            timestamp: Date.now(),
           };
           
           // FIX: Use correct method name 'replyMessage' instead of 'replyToMessage'

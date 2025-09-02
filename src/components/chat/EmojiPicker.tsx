@@ -12,15 +12,19 @@ interface EmojiPickerProps {
 }
 
 export default function EmojiPicker({ anchorEl, open, onClose, onSelect, isDark = false }: EmojiPickerProps) {
-  const emojis = useMemo(
-    () => [
-      "😀","😁","😂","🤣","😃","😄","😅","🥹","😊","😍","😘","😜","🤩","🤗","🤔","😎","😏","😴","🥱","😪",
-      "🙃","🙂","😇","🤤","😋","😛","😝","😤","😭","😡","😢","😮","😱","🤯","🤬","🤒","🤕","🤧","🥵","🥶",
-      "👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙌","🙏","💪","🤝","👊","🫶","💖","💘","💝","💗","💓",
-      "🔥","✨","🎉","🎊","💯","✔️","🫡","🤝","🫶","🧠","🍀","😇","🥰","🤌","🤤","😆","😉","🫠","🫥","🤫"
-    ],
-    []
-  );
+const emojis = useMemo(
+  () =>
+    Array.from(
+      new Set([
+        "😀","😁","😂","🤣","😃","😄","😅","🥹","😊","😍","😘","😜","🤩","🤗","🤔","😎","😏","😴","🥱","😪",
+        "🙃","🙂","😇","🤤","😋","😛","😝","😤","😭","😡","😢","😮","😱","🤯","🤬","🤒","🤕","🤧","🥵","🥶",
+        "👍","👎","👌","✌️","🤞","🤟","🤘","👏","🙌","🙏","💪","🤝","👊","🫶","💖","💘","💝","💗","💓",
+        "🔥","✨","🎉","🎊","💯","✔️","🫡","🧠","🍀","🥰","🤌","🤤","😆","😉","🫠","🫥","🤫"
+      ])
+    ),
+  []
+);
+
 
   return (
     <Popover
@@ -40,28 +44,27 @@ export default function EmojiPicker({ anchorEl, open, onClose, onSelect, isDark 
           p: 0.5,
         }}
       >
-
-            {emojis.map((e) => (
-          <IconButton
-            key={e}
-            onClick={() => {
-              onSelect(e);
-              onClose();
-            }}
-            size="small"
-            sx={{
-              fontSize: 20,
-              width: 32,
-              height: 32,
-              lineHeight: 1,
-              borderRadius: 1,
-              transition: "transform 0.05s",
-              "&:hover": { transform: "scale(1.1)" },
-            }}
-          >
-            {e}
-          </IconButton>
-        ))}
+{emojis.map((e, i) => (
+  <IconButton
+    key={`${e}-${i}`} // ensures uniqueness
+    onClick={() => {
+      onSelect(e);
+      onClose();
+    }}
+    size="small"
+    sx={{
+      fontSize: 20,
+      width: 32,
+      height: 32,
+      lineHeight: 1,
+      borderRadius: 1,
+      transition: "transform 0.05s",
+      "&:hover": { transform: "scale(1.1)" },
+    }}
+  >
+    {e}
+  </IconButton>
+))}
       </Box>
     </Popover>
   );

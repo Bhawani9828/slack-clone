@@ -288,13 +288,13 @@ const [deletedIds, setDeletedIds] = useState<string[]>([])
     }
   }
 
-  const renderMessageStatus = (msg: Message) => {
-    if (!msg.isSent) return null
-    if (msg.isError) return <ReportProblemOutlined sx={{ fontSize: 16, color: "#d32f2f", ml: 0.5 }} />
-    if (msg.isRead) return <DoneAllIcon sx={{ fontSize: 16, color: "#4caf50", ml: 0.5 }} />
-    if (msg.isDelivered) return <CheckIcon sx={{ fontSize: 16, color: "#9e9e9e", ml: 0.5 }} />
-    return <Schedule sx={{ fontSize: 16, color: "#9e9e9e", ml: 0.5 }} />
-  }
+const renderMessageStatus = (msg: Message) => {
+  if (!msg.isSent) return <Schedule sx={{ fontSize: 16, color: "#9e9e9e", ml: 0.5 }} />; // ⏳ sending
+  if (msg.isError) return <ReportProblemOutlined sx={{ fontSize: 16, color: "#d32f2f", ml: 0.5 }} />; // ❗ error
+  if (msg.isRead) return <DoneAllIcon sx={{ fontSize: 16, color: "blue", ml: 0.5 }} />; // ✔✔ blue (read)
+  if (msg.isDelivered) return <DoneAllIcon sx={{ fontSize: 16, color: "#9e9e9e", ml: 0.5 }} />; // ✔✔ gray (delivered)
+  return <CheckIcon sx={{ fontSize: 16, color: "#9e9e9e", ml: 0.5 }} />; // ✔ gray (sent to server)
+};
 
   const renderMediaContent = (msg: Message, isSentByCurrentUser: boolean) => {
     if (!msg.fileUrl) return null

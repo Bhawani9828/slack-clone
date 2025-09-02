@@ -29,13 +29,37 @@ export interface Message {
 }
 
 export interface ReplyMessagePayload {
+  id?: string
   originalMessageId: string;
   receiverId: string;
   content: string;
   type?: string;
-  channelId?: string; // 👈 ab allowed hai
+  channelId?: string; 
   replyToContent?: string;
   replyToSender?: string;
+  timestamp: number;
+ 
+}
+
+export interface ReplyData {
+  originalMessageId: string;
+  receiverId: string;
+  content: string;
+  type?: 'text' | 'image' | 'video' | 'file';
+}
+
+export interface ForwardData {
+  messageId: string;
+  receiverIds: string[];
+}
+export interface ReplyResponse {
+  id: string;
+  originalMessageId: string;
+  receiverId: string;
+  content: string;
+  type: string;
+  timestamp: number;
+  
 }
 
 // ✅ Add GroupMessage interface
